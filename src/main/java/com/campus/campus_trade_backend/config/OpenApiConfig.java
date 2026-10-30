@@ -14,8 +14,8 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .info(new Info()
                         .title("CampusTrade API")
-                        .version("V3")
-                        .description("AI 增强校园二手交易平台后端接口；当前 V3 覆盖认证、商品筛选与编辑、图片及线下订单闭环。"))
+                        .version("V4")
+                        .description("AI 增强校园二手交易平台后端接口；当前 V4 覆盖多用户认证隔离、商品与图片管理及线下订单闭环。"))
                 .components(new Components().addSecuritySchemes("bearerAuth",
                         new SecurityScheme()
                                 .type(SecurityScheme.Type.HTTP)

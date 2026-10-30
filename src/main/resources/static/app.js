@@ -1,87 +1,7 @@
-const state = { token: '', user: null, view: 'home', page: 1, query: '', categoryId: '', minPrice: '', maxPrice: '', sort: 'NEWEST', total: 0, categories: new Map(), selected: null, editingProduct: null, editReturnView: 'home', loadId: 0, pendingImages: [] };
-const $ = id => document.getElementById(id);
-const money = value => `¥${Number(value).toFixed(2)}`;
-const conditionName = { NEW: '全新', LIKE_NEW: '近新', GOOD: '良好', FAIR: '可用' };
-const statusName = { ON_SALE: '在售', RESERVED: '已预订', SOLD: '已售出', OFF_SHELF: '已下架', PENDING_MEETUP: '待线下面交', COMPLETED: '已完成', CANCELLED: '已取消' };
-const dateTime = value => value ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '';
-let toastTimer;
-let codeCountdownTimer;
-
-function toast(message, error = false) {
-  const node = $('toast');
-  node.textContent = message;
-  node.className = error ? 'toast error' : 'toast';
-  node.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { node.hidden = true; }, 5000);
-}
-
-function el(tag, text, className = '') {
-  const node = document.createElement(tag);
-  node.textContent = text;
-  if (className) node.className = className;
-  return node;
-}
-
-async function api(path, options = {}) {
-  const isForm = options.body instanceof FormData;
-  const headers = { ...(options.body && !isForm ? { 'Content-Type': 'application/json' } : {}) };
-  if (state.token) headers.Authorization = `Bearer ${state.token}`;
-  const response = await fetch(path, { ...options, headers });
-  const raw = await response.text();
-  let data = null;
-  if (raw) { try { data = JSON.parse(raw); } catch { data = raw; } }
-  if (!response.ok) {
-    if (response.status === 401 && state.token) {
-      logout(false);
-      throw new Error('登录已过期，请重新登录');
-    }
-    const detail = data && typeof data === 'object' ? (data.detail || data.message || data.title) : '';
-    throw new Error(`${response.status}${detail ? `：${detail}` : ''}`);
-  }
-  return data;
-}
-
-function setAuthMode(mode) {
-  const register = mode === 'register';
-  $('login-form').hidden = register;
-  $('register-form').hidden = !register;
-  $('show-login').classList.toggle('active', !register);
-  $('show-register').classList.toggle('active', register);
-  $('auth-title').textContent = register ? '加入校园好物圈' : '欢迎回来';
-  $('auth-subtitle').textContent = register ? '创建账号，开始分享和发现闲置' : '登录后浏览校园里的闲置好物';
-}
-
-function logout(showMessage = true) {
-  state.token = '';
-  state.user = null;
-  state.selected = null;
-  state.editingProduct = null;
-  sessionStorage.removeItem('campusTradeToken');
-  closeDetail();
-  $('app-view').hidden = true;
-  $('auth-view').hidden = false;
-  setAuthMode('login');
-  if (showMessage) toast('已退出登录');
-}
-
-async function finishLogin(token) {
-  state.token = token;
-  state.user = await api('/api/auth/me');
-  sessionStorage.setItem('campusTradeToken', token);
-  $('auth-view').hidden = true;
-  $('app-view').hidden = false;
-  const initial = (state.user.nickname || '同').trim().slice(0, 1);
-  $('header-avatar').textContent = initial;
-  $('profile-avatar').textContent = initial;
-  $('profile-name').textContent = state.user.nickname;
-  $('profile-email').textContent = state.user.email;
-  navigate('home');
-  try {
-    await loadCategories();
-    await loadProducts();
-  } catch (error) { toast(`页面数据加载失败：${error.message}`, true); }
-}
+import { $, conditionName, dateTime, el, money, state, toast } from './js/core.js';
+import { api, configureApi } from './js/api.js';
+import { bindAuthEvents, configureAuth, logout, restoreSession } from './js/auth.js';
+import { bindProfileEvents, configureProfile, loadProfile, profileTab } from './js/profile.js';
 
 function navigate(view) {
   state.view = view;
@@ -395,194 +315,6 @@ function startEdit(product) {
   navigate('publish');
 }
 
-function emptyProfile(icon, title, detail) {
-  const node = el('div', '', 'empty-state');
-  node.append(el('div', icon, 'empty-icon'), el('strong', title), el('span', detail));
-  return node;
-}
-
-function statusStyle(status) {
-  if (status === 'PENDING_MEETUP' || status === 'RESERVED') return 'status reserved';
-  if (status === 'CANCELLED' || status === 'OFF_SHELF') return 'status down';
-  return 'status';
-}
-
-function renderOrders(orders, host, buying) {
-  host.replaceChildren();
-  if (!orders.length) {
-    host.append(buying
-      ? emptyProfile('🧾', '还没有购买订单', '逛逛商品广场，发现心仪的物品。')
-      : emptyProfile('📦', '还没有售出订单', '有同学选购你的商品后，订单会显示在这里。'));
-    return;
-  }
-  for (const order of orders) {
-    const row = el('article', '', 'list-row');
-    row.append(el('div', buying ? '🧾' : '📦', 'mini-cover'));
-    const body = el('div', '', 'list-body');
-    body.append(el('h3', order.productTitle || `商品 #${order.productId}`), el('p', `订单 #${order.id} · 商品 #${order.productId}`));
-    if (!buying && order.status === 'PENDING_MEETUP') body.append(el('p', '等待买家线下面交后确认成交。'));
-    const side = el('div', '', 'list-side');
-    side.append(el('strong', money(order.price)), el('span', statusName[order.status] || order.status, statusStyle(order.status)));
-    if (buying && order.status === 'PENDING_MEETUP') {
-      const buttons = el('div', '', 'order-actions');
-      for (const [action, label] of [['cancel', '取消订单'], ['complete', '确认成交']]) {
-        const button = el('button', label, action === 'cancel' ? 'order-cancel' : 'order-complete');
-        button.type = 'button';
-        button.addEventListener('click', async () => {
-          if (action === 'complete' && !window.confirm('请确认已经线下面交并收到商品。确认后不可撤销。')) return;
-          for (const child of buttons.querySelectorAll('button')) child.disabled = true;
-          try {
-            await api(`/api/orders/${order.id}/${action}`, { method: 'POST' });
-            await Promise.all([loadProfile(), loadProducts()]);
-            toast(action === 'cancel' ? '订单已取消，商品重新上架' : '交易已完成，商品标记为已售出');
-          } catch (error) {
-            toast(`操作失败：${error.message}`, true);
-            for (const child of buttons.querySelectorAll('button')) child.disabled = false;
-          }
-        });
-        buttons.append(button);
-      }
-      side.append(buttons);
-    }
-    row.append(body, side);
-    host.append(row);
-  }
-}
-
-function renderPurchases(orders) {
-  $('purchase-count').textContent = orders.length;
-  renderOrders(orders, $('purchases-pane'), true);
-}
-
-function renderSales(orders) {
-  $('sales-count').textContent = orders.length;
-  renderOrders(orders, $('sales-pane'), false);
-}
-
-function renderListings(products) {
-  $('listing-count').textContent = products.length;
-  const host = $('listings-pane');
-  host.replaceChildren();
-  if (!products.length) { host.append(emptyProfile('📦', '还没有发布商品', '点击顶部“发布闲置”，分享你的第一件好物。')); return; }
-  for (const product of products) {
-    const row = el('article', '', 'list-row');
-    const mini = el('div', '', 'mini-cover');
-    if (product.coverImageUrl) {
-      const image = document.createElement('img');
-      image.src = product.coverImageUrl;
-      image.alt = product.title;
-      mini.append(image);
-    } else mini.textContent = iconFor(product);
-    row.append(mini);
-    const body = el('div', '', 'list-body');
-    body.append(el('h3', product.title), el('p', `商品 #${product.id} · ${displayCategory(product)} · ${conditionName[product.condition] || product.condition}`));
-    if (product.createdAt) body.append(el('p', `发布于 ${dateTime(product.createdAt)}`));
-    const side = el('div', '', 'list-side');
-    side.append(el('strong', money(product.price)), el('span', statusName[product.status] || product.status, statusStyle(product.status)));
-    const manage = el('button', product.status === 'ON_SALE' ? '查看 / 管理图片' : '查看商品详情', 'row-action');
-    manage.type = 'button';
-    manage.addEventListener('click', () => openDetail(product.id));
-    side.append(manage);
-    if (product.status === 'ON_SALE') {
-      const edit = el('button', '编辑商品', 'row-action');
-      edit.type = 'button';
-      edit.addEventListener('click', async () => {
-        edit.disabled = true;
-        try {
-          const detail = await api(`/api/products/${product.id}`);
-          startEdit(detail);
-        } catch (error) { toast(`加载商品失败：${error.message}`, true); edit.disabled = false; }
-      });
-      side.append(edit);
-      const down = el('button', '下架商品', 'row-action');
-      down.type = 'button';
-      down.addEventListener('click', async () => {
-        down.disabled = true;
-        try { await takeDown(product.id); } catch (error) { toast(`下架失败：${error.message}`, true); down.disabled = false; }
-      });
-      side.append(down);
-    }
-    row.append(body, side);
-    host.append(row);
-  }
-}
-
-async function loadProfile() {
-  const [purchases, sales, products] = await Promise.all([api('/api/orders/purchases'), api('/api/orders/sales'), api('/api/products/me')]);
-  renderPurchases(purchases);
-  renderSales(sales);
-  renderListings(products);
-}
-
-function profileTab(name) {
-  for (const tab of ['purchases', 'sales', 'listings']) {
-    $(`${tab}-pane`).hidden = tab !== name;
-    $(`tab-${tab}`).classList.toggle('active', tab === name);
-  }
-}
-
-$('show-login').addEventListener('click', () => setAuthMode('login'));
-$('show-register').addEventListener('click', () => setAuthMode('register'));
-$('send-code').addEventListener('click', async () => {
-  const form = $('register-form');
-  const emailInput = form.elements.email;
-  if (!emailInput.reportValidity()) return;
-  const button = $('send-code');
-  button.disabled = true;
-  try {
-    const result = await api('/api/auth/verification-codes', {
-      method: 'POST', body: JSON.stringify({ email: emailInput.value.trim() })
-    });
-    let remaining = 60;
-    clearInterval(codeCountdownTimer);
-    button.textContent = `${remaining} 秒后重试`;
-    codeCountdownTimer = setInterval(() => {
-      remaining--;
-      if (remaining <= 0) {
-        clearInterval(codeCountdownTimer);
-        button.textContent = '重新获取';
-        button.disabled = false;
-      } else {
-        button.textContent = `${remaining} 秒后重试`;
-      }
-    }, 1000);
-    toast(result.deliveryMode === 'SMTP' ? '验证码邮件已发送，请检查邮箱' : '本地验证码已生成，请查看后端控制台');
-  } catch (error) {
-    button.disabled = false;
-    toast(`验证码发送失败：${error.message}`, true);
-  }
-});
-$('login-form').addEventListener('submit', async event => {
-  event.preventDefault();
-  const form = new FormData(event.currentTarget);
-  const button = event.currentTarget.querySelector('button[type="submit"]');
-  button.disabled = true;
-  try {
-    const result = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ email: String(form.get('email')), password: String(form.get('password')) }) });
-    await finishLogin(result.accessToken);
-    event.currentTarget.reset();
-    toast('登录成功，欢迎来到商品广场');
-  } catch (error) { toast(`登录失败：${error.message}`, true); }
-  finally { button.disabled = false; }
-});
-$('register-form').addEventListener('submit', async event => {
-  event.preventDefault();
-  const form = new FormData(event.currentTarget);
-  const email = String(form.get('email'));
-  const password = String(form.get('password'));
-  const button = event.currentTarget.querySelector('button[type="submit"]');
-  button.disabled = true;
-  try {
-    await api('/api/auth/register', { method: 'POST', body: JSON.stringify({
-      nickname: String(form.get('nickname')), email, password, code: String(form.get('code'))
-    }) });
-    const result = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
-    await finishLogin(result.accessToken);
-    event.currentTarget.reset();
-    toast('注册成功，欢迎来到商品广场');
-  } catch (error) { toast(`注册失败：${error.message}`, true); }
-  finally { button.disabled = false; }
-});
 $('brand-home').addEventListener('click', () => navigate('home'));
 $('nav-home').addEventListener('click', () => navigate('home'));
 $('nav-publish').addEventListener('click', startCreate);
@@ -594,11 +326,6 @@ $('publish-back').addEventListener('click', () => {
   if (returnView === 'profile') profileTab('listings');
   navigate(returnView);
 });
-$('nav-profile').addEventListener('click', () => navigate('profile'));
-$('logout').addEventListener('click', () => logout());
-$('tab-purchases').addEventListener('click', () => profileTab('purchases'));
-$('tab-sales').addEventListener('click', () => profileTab('sales'));
-$('tab-listings').addEventListener('click', () => profileTab('listings'));
 $('detail-backdrop').addEventListener('click', closeDetail);
 $('close-detail').addEventListener('click', closeDetail);
 document.addEventListener('keydown', event => { if (event.key === 'Escape') closeDetail(); });
@@ -710,8 +437,10 @@ $('ai-draft-button').addEventListener('click', async () => {
 
 $('publish-form').addEventListener('submit', async event => {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
-  const button = event.currentTarget.querySelector('button[type="submit"]');
+  // currentTarget 仅在同步事件分发期间可靠；先保存表单引用，避免 await 后变为 null。
+  const formElement = event.currentTarget;
+  const form = new FormData(formElement);
+  const button = formElement.querySelector('button[type="submit"]');
   const editing = state.editingProduct;
   const payload = {
     categoryId: Number(form.get('categoryId')), title: String(form.get('title')),
@@ -731,7 +460,7 @@ $('publish-form').addEventListener('submit', async event => {
       try { await api(`/api/products/${productId}/images`, { method: 'POST', body: images }); }
       catch (error) { uploadError = error; }
     }
-    event.currentTarget.reset();
+    formElement.reset();
     setPublishMode();
     clearPendingImages();
     state.query = '';
@@ -756,9 +485,16 @@ $('publish-form').addEventListener('submit', async event => {
   finally { button.disabled = false; }
 });
 
-(async function boot() {
-  const token = sessionStorage.getItem('campusTradeToken');
-  if (!token) return;
-  try { await finishLogin(token); }
-  catch (error) { logout(false); toast(`请重新登录：${error.message}`, true); }
-})();
+configureApi({ getToken: () => state.token, onUnauthorized: () => logout(false) });
+configureAuth({
+  navigate, closeDetail, loadCategories, loadProducts,
+  resetProductDraft: () => {
+    setPublishMode();
+    clearPendingImages();
+    $('publish-form').reset();
+  }
+});
+configureProfile({ navigate, openDetail, startEdit, takeDown, loadProducts, iconFor, displayCategory });
+bindAuthEvents();
+bindProfileEvents();
+restoreSession();

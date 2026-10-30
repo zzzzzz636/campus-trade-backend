@@ -39,7 +39,7 @@ class CampusTradeBackendApplicationTests {
 		mvc.perform(get("/v3/api-docs"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.info.title").value("CampusTrade API"))
-				.andExpect(jsonPath("$.info.version").value("V3"));
+				.andExpect(jsonPath("$.info.version").value("V4"));
 	}
 
 }
