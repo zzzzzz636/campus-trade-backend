@@ -2,10 +2,10 @@
 
 CampusTrade 是一个面向高校学生的模块化单体二手交易平台。当前正在 `feature/v3-resume-readiness` 分支进行 V3 工程化升级，使用 Java 17、Spring Boot 4.1、Spring Security、JWT、MyBatis、MySQL/H2、Redis、SMTP、Docker Compose、Flyway 和原生 HTML/CSS/JavaScript。
 
-## V2 已实现
+## 当前已实现
 
 - 邮箱验证码注册、登录、JWT 鉴权和禁用账号令牌即时失效。
-- 商品发布、搜索、分页、详情、个人发布列表和下架。
+- 商品发布、关键词/分类/价格筛选、分页、三种白名单排序、详情、在售编辑、个人发布列表和下架。
 - 单商品最多 6 张 JPEG/PNG/WebP 图片；真实文件头、大小和权限校验；本地存储可替换。
 - 买家下单、取消、确认成交；卖家查看收到的订单；商品状态与订单状态保持一致。
 - 条件更新防止并发重复购买，请求标识防止重复下单。
@@ -17,6 +17,7 @@ CampusTrade 是一个面向高校学生的模块化单体二手交易平台。�
 - 运行说明：[`docs/quickstart.md`](docs/quickstart.md)
 - V3 现状审计：[`docs/V3_AUDIT.md`](docs/V3_AUDIT.md)
 - V3 第一阶段记录：[`docs/V3_PHASE1.md`](docs/V3_PHASE1.md)
+- V3 第二阶段记录：[`docs/V3_PHASE2.md`](docs/V3_PHASE2.md)
 - V2 技术设计：[`docs/V2_TECHNICAL_NOTES.md`](docs/V2_TECHNICAL_NOTES.md)
 - 页面：`http://localhost:8080/`
 - Swagger UI：`http://localhost:8080/swagger-ui.html`

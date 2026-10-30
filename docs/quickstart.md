@@ -81,10 +81,11 @@ $env:JAVA_HOME='C:\Users\zw\.jdks\ms-17.0.19'
 | `POST /api/auth/login` | 登录；`email`、`password`；返回 `accessToken` |
 | `GET /api/auth/me` | 查询当前用户 |
 | `GET /api/categories` | 查询可选分类 |
-| `GET /api/products?page=1&size=10&q=教材` | 查询和搜索在售商品；结果含发布者昵称 |
+| `GET /api/products?page=1&size=10&q=教材&categoryId=1&minPrice=10&maxPrice=100&sort=NEWEST` | 查询在售商品；支持关键词、分类、价格和排序 |
 | `GET /api/products/{id}` | 商品详情 |
 | `GET /api/products/me` | 我的发布，含在售、已预订和已下架状态；最近 100 件 |
 | `POST /api/products` | 发布；`categoryId`、`title`、`description`、`price`、`conditionLevel` |
+| `PUT /api/products/{id}` | 卖家编辑自己的在售商品；请求字段与发布一致 |
 | `DELETE /api/products/{id}` | 卖家下架自己的商品；成功返回 204 |
 | `POST /api/products/{id}/images` | 上传 1–6 张商品图片；multipart 字段 `files` |
 | `DELETE /api/products/{id}/images/{imageId}` | 删除自己商品的图片 |
@@ -96,6 +97,6 @@ $env:JAVA_HOME='C:\Users\zw\.jdks\ms-17.0.19'
 | `POST /api/orders/{id}/complete` | 买家确认线下成交 |
 | `GET /api/orders/{id}` | 订单参与者查看详情 |
 
-`conditionLevel` 可选 `NEW`、`LIKE_NEW`、`GOOD`、`FAIR`。选购后订单状态为 `PENDING_MEETUP`，商品变为 `RESERVED`，从公开列表消失。删除采用下架以保留交易记录。
+`conditionLevel` 可选 `NEW`、`LIKE_NEW`、`GOOD`、`FAIR`；`sort` 可选 `NEWEST`、`PRICE_ASC`、`PRICE_DESC`。选购后订单状态为 `PENDING_MEETUP`，商品变为 `RESERVED`，从公开列表消失。删除采用下架以保留交易记录；已预订、已售出或已下架的商品不能编辑。
 
 V2 尚未实现收藏、聊天/联系方式治理、举报审核、密码找回、AI 功能和 Vue 前端；根路径提供可真实调用后端的原生前端体验页。

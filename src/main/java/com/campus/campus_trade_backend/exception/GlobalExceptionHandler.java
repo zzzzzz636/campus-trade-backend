@@ -8,6 +8,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -38,6 +41,21 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ConstraintViolationException.class)
     ProblemDetail invalidParameter(ConstraintViolationException exception, HttpServletRequest request) {
         return problem(HttpStatus.BAD_REQUEST.value(), exception.getMessage(), request);
+    }
+
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    ProblemDetail invalidMethodParameter(HandlerMethodValidationException exception, HttpServletRequest request) {
+        return problem(HttpStatus.BAD_REQUEST.value(), "请求参数不合法", request);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    ProblemDetail invalidParameterType(MethodArgumentTypeMismatchException exception, HttpServletRequest request) {
+        return problem(HttpStatus.BAD_REQUEST.value(), "请求参数格式不正确：" + exception.getName(), request);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    ProblemDetail unreadableBody(HttpMessageNotReadableException exception, HttpServletRequest request) {
+        return problem(HttpStatus.BAD_REQUEST.value(), "请求体格式不正确", request);
     }
 
     @ExceptionHandler(MissingServletRequestPartException.class)

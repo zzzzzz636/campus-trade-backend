@@ -1,8 +1,9 @@
-const state = { token: '', user: null, view: 'home', page: 1, query: '', total: 0, categories: new Map(), selected: null, loadId: 0, pendingImages: [] };
+const state = { token: '', user: null, view: 'home', page: 1, query: '', categoryId: '', minPrice: '', maxPrice: '', sort: 'NEWEST', total: 0, categories: new Map(), selected: null, editingProduct: null, loadId: 0, pendingImages: [] };
 const $ = id => document.getElementById(id);
 const money = value => `¥${Number(value).toFixed(2)}`;
 const conditionName = { NEW: '全新', LIKE_NEW: '近新', GOOD: '良好', FAIR: '可用' };
 const statusName = { ON_SALE: '在售', RESERVED: '已预订', SOLD: '已售出', OFF_SHELF: '已下架', PENDING_MEETUP: '待线下面交', COMPLETED: '已完成', CANCELLED: '已取消' };
+const dateTime = value => value ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '';
 let toastTimer;
 let codeCountdownTimer;
 
@@ -55,6 +56,7 @@ function logout(showMessage = true) {
   state.token = '';
   state.user = null;
   state.selected = null;
+  state.editingProduct = null;
   sessionStorage.removeItem('campusTradeToken');
   closeDetail();
   $('app-view').hidden = true;
@@ -75,10 +77,10 @@ async function finishLogin(token) {
   $('profile-name').textContent = state.user.nickname;
   $('profile-email').textContent = state.user.email;
   navigate('home');
-  const results = await Promise.allSettled([loadCategories(), loadProducts()]);
-  for (const result of results) {
-    if (result.status === 'rejected') toast(`页面数据加载失败：${result.reason.message}`, true);
-  }
+  try {
+    await loadCategories();
+    await loadProducts();
+  } catch (error) { toast(`页面数据加载失败：${error.message}`, true); }
 }
 
 function navigate(view) {
@@ -97,16 +99,27 @@ async function loadCategories() {
   state.categories = new Map(categories.map(category => [Number(category.id), category.name]));
   const select = $('category-select');
   select.replaceChildren();
+  const filter = $('category-filter');
+  filter.replaceChildren(el('option', '全部分类'));
+  filter.firstElementChild.value = '';
   for (const category of categories) {
     const option = el('option', category.name);
     option.value = category.id;
     select.append(option);
+    const filterOption = el('option', category.name);
+    filterOption.value = category.id;
+    filter.append(filterOption);
   }
+  filter.value = state.categoryId;
 }
 
 function categoryName(id) { return state.categories.get(Number(id)) || '校园好物'; }
+function displayCategory(item) { return item.categoryName || categoryName(item.categoryId); }
+function hasProductFilters() {
+  return Boolean(state.query || state.categoryId || state.minPrice || state.maxPrice || state.sort !== 'NEWEST');
+}
 function iconFor(item) {
-  const text = `${categoryName(item.categoryId)} ${item.title}`;
+  const text = `${displayCategory(item)} ${item.title}`;
   if (/书|教材|笔记|资料/.test(text)) return '📚';
   if (/灯/.test(text)) return '💡';
   if (/耳机|音箱|数码|手机|电脑|电器/.test(text)) return '🎧';
@@ -138,7 +151,7 @@ function sampleCards() {
     const image = cover(item, index);
     image.append(el('span', '示意卡片', 'sample-badge'));
     const body = el('div', '', 'product-body');
-    body.append(el('span', categoryName(item.categoryId), 'tag'), el('h3', item.title), el('div', '等待真实商品发布', 'subtle'));
+    body.append(el('span', displayCategory(item), 'tag'), el('h3', item.title), el('div', '等待真实商品发布', 'subtle'));
     const meta = el('div', '', 'product-meta');
     meta.append(el('span', `发布者 · ${item.sellerNickname}`));
     body.append(meta);
@@ -150,7 +163,7 @@ function sampleCards() {
 function renderProducts(items) {
   const host = $('products');
   host.replaceChildren();
-  if (!items.length && state.total === 0 && !state.query) {
+  if (!items.length && state.total === 0 && !hasProductFilters()) {
     sampleCards();
   } else if (!items.length) {
     const empty = el('div', '', 'empty-state');
@@ -161,17 +174,17 @@ function renderProducts(items) {
       const card = el('button', '', 'product-card');
       card.type = 'button';
       const body = el('div', '', 'product-body');
-      body.append(el('span', categoryName(item.categoryId), 'tag'), el('h3', item.title), el('div', money(item.price), 'price'));
+      body.append(el('span', displayCategory(item), 'tag'), el('h3', item.title), el('div', money(item.price), 'price'));
       const meta = el('div', '', 'product-meta');
       meta.append(el('span', `发布者 · ${item.sellerNickname || '校园同学'}`), el('span', conditionName[item.condition] || item.condition));
-      body.append(meta);
+      body.append(meta, el('time', item.createdAt ? `发布于 ${dateTime(item.createdAt)}` : '', 'product-time'));
       card.append(cover(item, index), body);
       card.addEventListener('click', () => openDetail(item.id));
       host.append(card);
     }
   }
-  $('result-label').textContent = state.query ? `“${state.query}”的搜索结果：${state.total} 件` : `全部在售商品 · ${state.total} 件`;
-  $('clear-search').hidden = !state.query;
+  $('result-label').textContent = hasProductFilters() ? `符合当前条件的商品 · ${state.total} 件` : `全部在售商品 · ${state.total} 件`;
+  $('clear-search').hidden = !hasProductFilters();
   $('page-label').textContent = `第 ${state.page} 页`;
   $('prev-page').disabled = state.page <= 1;
   $('next-page').disabled = state.page * 12 >= state.total;
@@ -180,7 +193,11 @@ function renderProducts(items) {
 
 async function loadProducts() {
   const id = ++state.loadId;
-  const result = await api(`/api/products?page=${state.page}&size=12&q=${encodeURIComponent(state.query)}`);
+  const params = new URLSearchParams({ page: state.page, size: 12, q: state.query, sort: state.sort });
+  if (state.categoryId) params.set('categoryId', state.categoryId);
+  if (state.minPrice) params.set('minPrice', state.minPrice);
+  if (state.maxPrice) params.set('maxPrice', state.maxPrice);
+  const result = await api(`/api/products?${params}`);
   if (id !== state.loadId) return;
   if (result.total > 0 && result.items.length === 0 && state.page > 1) {
     state.page = Math.ceil(result.total / 12);
@@ -267,33 +284,44 @@ async function openDetail(id) {
     state.selected = product;
     const own = Number(state.user.id) === Number(product.sellerId);
     renderDetailImages(product, own);
-    $('detail-category').textContent = categoryName(product.categoryId);
+    $('detail-category').textContent = displayCategory(product);
     $('detail-title').textContent = product.title;
     $('detail-seller').textContent = `发布者 · ${product.sellerNickname || '校园同学'}`;
+    $('detail-published').textContent = product.createdAt ? `发布于 ${dateTime(product.createdAt)}` : '';
     $('detail-price').textContent = money(product.price);
     $('detail-description').textContent = product.description;
     $('detail-condition').textContent = `商品成色：${conditionName[product.condition] || product.condition}`;
     const actions = $('detail-actions');
     actions.replaceChildren();
     if (product.status === 'ON_SALE') {
-      const button = el('button', own ? '下架这件商品' : '选择商品，创建线下面交订单', own ? 'primary danger' : 'primary');
-      button.type = 'button';
-      const requestKey = crypto.randomUUID();
-      button.addEventListener('click', async () => {
-        button.disabled = true;
-        try {
-          if (own) {
-            await takeDown(product.id);
-          } else {
+      if (own) {
+        const editButton = el('button', '编辑商品信息', 'primary secondary-action');
+        editButton.type = 'button';
+        editButton.addEventListener('click', () => startEdit(product));
+        const downButton = el('button', '下架这件商品', 'primary danger');
+        downButton.type = 'button';
+        downButton.addEventListener('click', async () => {
+          downButton.disabled = true;
+          try { await takeDown(product.id); }
+          catch (error) { toast(`操作失败：${error.message}`, true); downButton.disabled = false; }
+        });
+        actions.append(editButton, downButton);
+      } else {
+        const button = el('button', '选择商品，创建线下面交订单', 'primary');
+        button.type = 'button';
+        const requestKey = crypto.randomUUID();
+        button.addEventListener('click', async () => {
+          button.disabled = true;
+          try {
             const order = await api('/api/orders', { method: 'POST', body: JSON.stringify({ productId: product.id, requestKey }) });
             closeDetail();
             await loadProducts();
             toast(`订单 #${order.id} 已创建，可在个人中心查看。`);
-          }
-        } catch (error) { toast(`操作失败：${error.message}`, true); }
-        finally { button.disabled = false; }
-      });
-      actions.append(button);
+          } catch (error) { toast(`操作失败：${error.message}`, true); }
+          finally { button.disabled = false; }
+        });
+        actions.append(button);
+      }
     }
     $('detail-overlay').hidden = false;
     $('close-detail').focus();
@@ -306,6 +334,44 @@ async function takeDown(id) {
   await loadProducts();
   if (state.view === 'profile') await loadProfile();
   toast('商品已下架');
+}
+
+function setPublishMode(product = null) {
+  state.editingProduct = product;
+  const editing = Boolean(product);
+  $('publish-eyebrow').textContent = editing ? 'EDIT LISTING' : 'SELL AN ITEM';
+  $('publish-title').textContent = editing ? '编辑商品信息' : '发布你的闲置';
+  $('publish-subtitle').textContent = editing ? '只有在售商品可以修改；图片可在商品详情中继续管理。' : '写清楚物品情况，方便同学了解。发布后会出现在商品广场。';
+  $('publish-form-tip').textContent = editing ? '选择的新照片会追加到现有图片中，最多仍为 6 张。' : '发布前可以预览并移除已选择的照片。';
+  $('publish-submit').textContent = editing ? '保存修改 →' : '确认发布 →';
+}
+
+function clearPendingImages() {
+  state.pendingImages = [];
+  renderImagePreview();
+}
+
+function startCreate() {
+  setPublishMode();
+  $('publish-form').reset();
+  clearPendingImages();
+  navigate('publish');
+}
+
+function startEdit(product) {
+  if (!product || product.status !== 'ON_SALE') {
+    toast('只有在售商品可以编辑', true);
+    return;
+  }
+  setPublishMode(product);
+  const form = $('publish-form');
+  form.elements.categoryId.value = String(product.categoryId);
+  form.elements.conditionLevel.value = product.condition;
+  form.elements.title.value = product.title;
+  form.elements.description.value = product.description;
+  form.elements.price.value = product.price;
+  clearPendingImages();
+  navigate('publish');
 }
 
 function emptyProfile(icon, title, detail) {
@@ -388,7 +454,8 @@ function renderListings(products) {
     } else mini.textContent = iconFor(product);
     row.append(mini);
     const body = el('div', '', 'list-body');
-    body.append(el('h3', product.title), el('p', `商品 #${product.id} · ${categoryName(product.categoryId)} · ${conditionName[product.condition] || product.condition}`));
+    body.append(el('h3', product.title), el('p', `商品 #${product.id} · ${displayCategory(product)} · ${conditionName[product.condition] || product.condition}`));
+    if (product.createdAt) body.append(el('p', `发布于 ${dateTime(product.createdAt)}`));
     const side = el('div', '', 'list-side');
     side.append(el('strong', money(product.price)), el('span', statusName[product.status] || product.status, statusStyle(product.status)));
     const manage = el('button', '查看 / 管理图片', 'row-action');
@@ -396,6 +463,16 @@ function renderListings(products) {
     manage.addEventListener('click', () => openDetail(product.id));
     side.append(manage);
     if (product.status === 'ON_SALE') {
+      const edit = el('button', '编辑商品', 'row-action');
+      edit.type = 'button';
+      edit.addEventListener('click', async () => {
+        edit.disabled = true;
+        try {
+          const detail = await api(`/api/products/${product.id}`);
+          startEdit(detail);
+        } catch (error) { toast(`加载商品失败：${error.message}`, true); edit.disabled = false; }
+      });
+      side.append(edit);
       const down = el('button', '下架商品', 'row-action');
       down.type = 'button';
       down.addEventListener('click', async () => {
@@ -487,9 +564,9 @@ $('register-form').addEventListener('submit', async event => {
 });
 $('brand-home').addEventListener('click', () => navigate('home'));
 $('nav-home').addEventListener('click', () => navigate('home'));
-$('nav-publish').addEventListener('click', () => navigate('publish'));
-$('home-publish').addEventListener('click', () => navigate('publish'));
-$('publish-back').addEventListener('click', () => navigate('home'));
+$('nav-publish').addEventListener('click', startCreate);
+$('home-publish').addEventListener('click', startCreate);
+$('publish-back').addEventListener('click', () => { setPublishMode(); clearPendingImages(); navigate('home'); });
 $('nav-profile').addEventListener('click', () => navigate('profile'));
 $('logout').addEventListener('click', () => logout());
 $('tab-purchases').addEventListener('click', () => profileTab('purchases'));
@@ -501,15 +578,41 @@ document.addEventListener('keydown', event => { if (event.key === 'Escape') clos
 $('search-form').addEventListener('submit', event => {
   event.preventDefault();
   state.query = $('search-input').value.trim();
+  state.categoryId = $('category-filter').value;
+  state.minPrice = $('min-price-filter').value;
+  state.maxPrice = $('max-price-filter').value;
+  state.sort = $('sort-filter').value;
   state.page = 1;
   loadProducts().catch(error => toast(`搜索失败：${error.message}`, true));
 });
+$('category-filter').addEventListener('change', applyProductFilters);
+$('min-price-filter').addEventListener('change', applyProductFilters);
+$('max-price-filter').addEventListener('change', applyProductFilters);
+$('sort-filter').addEventListener('change', applyProductFilters);
 $('clear-search').addEventListener('click', () => {
   $('search-input').value = '';
+  $('category-filter').value = '';
+  $('min-price-filter').value = '';
+  $('max-price-filter').value = '';
+  $('sort-filter').value = 'NEWEST';
   state.query = '';
+  state.categoryId = '';
+  state.minPrice = '';
+  state.maxPrice = '';
+  state.sort = 'NEWEST';
   state.page = 1;
   loadProducts().catch(error => toast(`加载失败：${error.message}`, true));
 });
+
+function applyProductFilters() {
+  state.query = $('search-input').value.trim();
+  state.categoryId = $('category-filter').value;
+  state.minPrice = $('min-price-filter').value;
+  state.maxPrice = $('max-price-filter').value;
+  state.sort = $('sort-filter').value;
+  state.page = 1;
+  loadProducts().catch(error => toast(`筛选失败：${error.message}`, true));
+}
 $('prev-page').addEventListener('click', () => { if (state.page > 1) { state.page--; loadProducts().catch(error => toast(error.message, true)); } });
 $('next-page').addEventListener('click', () => { if (state.page * 12 < state.total) { state.page++; loadProducts().catch(error => toast(error.message, true)); } });
 $('product-images').addEventListener('change', event => {
@@ -548,32 +651,45 @@ $('publish-form').addEventListener('submit', async event => {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
   const button = event.currentTarget.querySelector('button[type="submit"]');
+  const editing = state.editingProduct;
+  const payload = {
+    categoryId: Number(form.get('categoryId')), title: String(form.get('title')),
+    description: String(form.get('description')), price: Number(form.get('price')),
+    conditionLevel: String(form.get('conditionLevel'))
+  };
   button.disabled = true;
   try {
-    const created = await api('/api/products', { method: 'POST', body: JSON.stringify({
-      categoryId: Number(form.get('categoryId')), title: String(form.get('title')),
-      description: String(form.get('description')), price: Number(form.get('price')),
-      conditionLevel: String(form.get('conditionLevel'))
-    }) });
+    const saved = await api(editing ? `/api/products/${editing.id}` : '/api/products', {
+      method: editing ? 'PUT' : 'POST', body: JSON.stringify(payload)
+    });
+    const productId = editing ? editing.id : saved.id;
     let uploadError = null;
     if (state.pendingImages.length) {
       const images = new FormData();
       for (const file of state.pendingImages) images.append('files', file, file.name);
-      try { await api(`/api/products/${created.id}/images`, { method: 'POST', body: images }); }
+      try { await api(`/api/products/${productId}/images`, { method: 'POST', body: images }); }
       catch (error) { uploadError = error; }
     }
     event.currentTarget.reset();
-    state.pendingImages = [];
-    renderImagePreview();
+    setPublishMode();
+    clearPendingImages();
     state.query = '';
+    state.categoryId = '';
+    state.minPrice = '';
+    state.maxPrice = '';
+    state.sort = 'NEWEST';
     state.page = 1;
     $('search-input').value = '';
+    $('category-filter').value = '';
+    $('min-price-filter').value = '';
+    $('max-price-filter').value = '';
+    $('sort-filter').value = 'NEWEST';
     navigate('home');
     await loadProducts();
     toast(uploadError
-      ? `商品 #${created.id} 已发布，但图片上传失败：${uploadError.message}。可在个人中心重试。`
-      : `商品 #${created.id} 发布成功`, Boolean(uploadError));
-  } catch (error) { toast(`发布失败：${error.message}`, true); }
+      ? `商品 #${productId} 信息已保存，但图片上传失败：${uploadError.message}。可在个人中心重试。`
+      : `商品 #${productId} ${editing ? '修改' : '发布'}成功`, Boolean(uploadError));
+  } catch (error) { toast(`${editing ? '修改' : '发布'}失败：${error.message}`, true); }
   finally { button.disabled = false; }
 });
 

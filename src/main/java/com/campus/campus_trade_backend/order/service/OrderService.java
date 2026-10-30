@@ -30,7 +30,8 @@ public class OrderService {
 
     @Transactional
     public OrderResponse create(long productId, long buyerId, String requestKey) {
-        ProductEntity product = productMapper.findAnyById(productId);
+        // 锁定商品行，避免卖家编辑与买家下单交错后，订单保存了过期标题或价格。
+        ProductEntity product = productMapper.findAnyByIdForUpdate(productId);
         if (product == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "商品不存在");
         }

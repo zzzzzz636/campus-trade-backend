@@ -3,6 +3,7 @@ package com.campus.campus_trade_backend;
 import com.campus.campus_trade_backend.order.service.OrderService;
 import com.campus.campus_trade_backend.product.dto.ConditionLevel;
 import com.campus.campus_trade_backend.product.dto.CreateProductRequest;
+import com.campus.campus_trade_backend.product.dto.UpdateProductRequest;
 import com.campus.campus_trade_backend.product.service.ProductService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -121,6 +122,37 @@ class MySqlOrderConcurrencyIntegrationTests {
                 "SELECT status FROM product WHERE id = ?", String.class, secondProduct));
         assertEquals(0L, jdbc.queryForObject(
                 "SELECT COUNT(*) FROM trade_order WHERE product_id = ?", Long.class, secondProduct));
+    }
+
+    @Test
+    void mysqlExecutesProductFiltersSortAndEdit() {
+        long sellerId = user("mysql-v3-seller");
+        String marker = UUID.randomUUID().toString().substring(0, 8);
+        productService.create(new CreateProductRequest(1L, marker + " 教材", "MySQL V3 查询",
+                new BigDecimal("30.00"), ConditionLevel.GOOD), sellerId);
+        productService.create(new CreateProductRequest(2L, marker + " 耳机", "MySQL V3 查询",
+                new BigDecimal("10.00"), ConditionLevel.LIKE_NEW), sellerId);
+        long editableId = productService.create(new CreateProductRequest(2L, marker + " 台灯", "MySQL V3 查询",
+                new BigDecimal("20.00"), ConditionLevel.GOOD), sellerId);
+
+        var filtered = productService.list(1, 10, marker, 2L,
+                new BigDecimal("15.00"), new BigDecimal("25.00"), "PRICE_DESC");
+        assertEquals(1, filtered.total());
+        assertEquals(editableId, filtered.items().get(0).id());
+        assertEquals("数码与电器", filtered.items().get(0).categoryName());
+        assertTrue(filtered.items().get(0).createdAt() != null);
+
+        var updated = productService.update(editableId, sellerId,
+                new UpdateProductRequest(1L, marker + " 已更新", "MySQL 条件更新",
+                        new BigDecimal("18.50"), ConditionLevel.FAIR));
+        assertEquals(marker + " 已更新", updated.title());
+        assertEquals("教材", updated.categoryName());
+        assertEquals(new BigDecimal("18.50"), updated.price());
+
+        long buyerId = user("mysql-v3-buyer");
+        var order = orderService.create(editableId, buyerId, UUID.randomUUID().toString());
+        assertEquals(new BigDecimal("18.50"), order.price());
+        assertEquals(marker + " 已更新", order.productTitle());
     }
 
     private long user(String nickname) {
