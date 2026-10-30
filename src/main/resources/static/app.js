@@ -344,6 +344,7 @@ function setPublishMode(product = null) {
   $('publish-subtitle').textContent = editing ? '只有在售商品可以修改；图片可在商品详情中继续管理。' : '写清楚物品情况，方便同学了解。发布后会出现在商品广场。';
   $('publish-form-tip').textContent = editing ? '选择的新照片会追加到现有图片中，最多仍为 6 张。' : '发布前可以预览并移除已选择的照片。';
   $('publish-submit').textContent = editing ? '保存修改 →' : '确认发布 →';
+  $('ai-draft-panel').hidden = editing;
 }
 
 function clearPendingImages() {
@@ -646,6 +647,40 @@ function renderImagePreview() {
     host.append(item);
   });
 }
+
+$('ai-draft-button').addEventListener('click', async () => {
+  const form = $('publish-form');
+  const rawTitle = form.elements.title.value.trim();
+  const rawDescription = form.elements.description.value.trim();
+  if (!rawDescription) {
+    toast('请先在商品描述中写下物品的真实情况，再让 AI 帮你整理', true);
+    form.elements.description.focus();
+    return;
+  }
+
+  const button = $('ai-draft-button');
+  button.disabled = true;
+  button.textContent = 'AI 正在整理…';
+  try {
+    const suggestion = await api('/api/ai/product-draft', {
+      method: 'POST',
+      body: JSON.stringify({
+        rawTitle,
+        rawDescription,
+        conditionLevel: form.elements.conditionLevel.value
+      })
+    });
+    form.elements.title.value = suggestion.title;
+    form.elements.description.value = suggestion.description;
+    form.elements.categoryId.value = String(suggestion.categoryId);
+    toast(`AI 已建议“${suggestion.categoryName}”分类。请检查内容和价格后再发布。`);
+  } catch (error) {
+    toast(`AI 整理未完成：${error.message}。原内容已保留，可以继续手动发布。`, true);
+  } finally {
+    button.disabled = false;
+    button.textContent = '✨ AI 帮我整理';
+  }
+});
 
 $('publish-form').addEventListener('submit', async event => {
   event.preventDefault();

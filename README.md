@@ -11,6 +11,7 @@ CampusTrade 是一个面向高校学生的模块化单体二手交易平台。�
 - 条件更新防止并发重复购买，请求标识防止重复下单。
 - Redis 验证码 TTL、发送冷却、错误次数限制和成功后防重放。
 - Mailpit 本地 SMTP 联调、统一异常响应、Swagger UI 和自动化测试。
+- 可选的 AI 辅助发布：根据原始描述建议标题、规范描述和已有分类；结构化输出二次校验，超时、瞬时重试、按用户限流且失败不阻塞手动发布。
 
 ## 快速入口
 
@@ -18,6 +19,7 @@ CampusTrade 是一个面向高校学生的模块化单体二手交易平台。�
 - V3 现状审计：[`docs/V3_AUDIT.md`](docs/V3_AUDIT.md)
 - V3 第一阶段记录：[`docs/V3_PHASE1.md`](docs/V3_PHASE1.md)
 - V3 第二阶段记录：[`docs/V3_PHASE2.md`](docs/V3_PHASE2.md)
+- V3 第三阶段记录：[`docs/V3_PHASE3.md`](docs/V3_PHASE3.md)
 - V2 技术设计：[`docs/V2_TECHNICAL_NOTES.md`](docs/V2_TECHNICAL_NOTES.md)
 - 页面：`http://localhost:8080/`
 - Swagger UI：`http://localhost:8080/swagger-ui.html`
@@ -33,4 +35,4 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 
 普通测试使用独立 H2 数据库。Docker Redis/Mailpit 可用时，`DockerMailRedisIntegrationTests` 会执行真实 Redis + SMTP 流程；服务未运行时该测试会明确跳过。显式加入 `-Dcampus.mysql.tests=true` 可执行 Testcontainers MySQL 8.4 迁移与订单并发测试，详见快速运行文档。
 
-> 不要将数据库密码、JWT 密钥或 SMTP 授权码提交到仓库。`.env` 已被忽略，`.env.example` 只提供变量名称。
+> 不要将数据库密码、JWT 密钥、SMTP 授权码或 AI API Key 提交到仓库。`.env` 已被忽略，`.env.example` 只提供变量名称。

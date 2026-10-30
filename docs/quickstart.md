@@ -59,6 +59,21 @@ $env:CAMPUS_SMTP_FROM='noreply@campustrade.local'
 
 `.env` 不会被 Spring Boot 或 IDEA 自动加载。IDEA Community 也可运行主类：JRE 设为 17，Program arguments 填 `--spring.profiles.active=mysql`，Environment variables 至少填写 `CAMPUS_DB_URL`、`CAMPUS_DB_USER`、`CAMPUS_DB_PASSWORD`、`CAMPUS_JWT_SECRET`，以及 Redis/SMTP 变量。正式部署需安全保存固定 JWT 密钥；重新生成密钥会使旧令牌失效。不要把密码或密钥写入仓库。
 
+## 可选：启用 AI 辅助发布
+
+AI 默认关闭，未配置 API Key 时登录、商品、图片和订单功能仍可正常使用。要在当前 PowerShell 临时启用 OpenAI Responses API：
+
+```powershell
+$env:CAMPUS_AI_ENABLED='true'
+$env:CAMPUS_AI_API_KEY='填写你自己的 API Key'
+$env:CAMPUS_AI_MODEL='gpt-4o-mini'
+.\mvnw.cmd spring-boot:run
+```
+
+在 IDEA 的运行配置中也可以填写同名 Environment variables。`CAMPUS_AI_API_KEY` 不得写入 `application.properties`、JavaScript、`.env.example` 或 Git；如果使用本机 `.env`，也要确认它保持被忽略。
+
+发布页面先填写真实的商品描述，再点击“AI 帮我整理”。AI 只回填可编辑建议，不会自动发布、不会决定价格，也不会影响已经选择的图片。默认限制每位用户每分钟 5 次，单次请求 12 秒超时；可通过 `.env.example` 中对应变量调整。
+
 ## 执行真实 MySQL 集成测试
 
 Docker Desktop 运行时可执行：
@@ -85,6 +100,7 @@ $env:JAVA_HOME='C:\Users\zw\.jdks\ms-17.0.19'
 | `GET /api/products/{id}` | 商品详情 |
 | `GET /api/products/me` | 我的发布，含在售、已预订和已下架状态；最近 100 件 |
 | `POST /api/products` | 发布；`categoryId`、`title`、`description`、`price`、`conditionLevel` |
+| `POST /api/ai/product-draft` | AI 建议草稿；`rawTitle`、`rawDescription`、`conditionLevel`；必须登录 |
 | `PUT /api/products/{id}` | 卖家编辑自己的在售商品；请求字段与发布一致 |
 | `DELETE /api/products/{id}` | 卖家下架自己的商品；成功返回 204 |
 | `POST /api/products/{id}/images` | 上传 1–6 张商品图片；multipart 字段 `files` |
@@ -99,4 +115,4 @@ $env:JAVA_HOME='C:\Users\zw\.jdks\ms-17.0.19'
 
 `conditionLevel` 可选 `NEW`、`LIKE_NEW`、`GOOD`、`FAIR`；`sort` 可选 `NEWEST`、`PRICE_ASC`、`PRICE_DESC`。选购后订单状态为 `PENDING_MEETUP`，商品变为 `RESERVED`，从公开列表消失。删除采用下架以保留交易记录；已预订、已售出或已下架的商品不能编辑。
 
-V2 尚未实现收藏、聊天/联系方式治理、举报审核、密码找回、AI 功能和 Vue 前端；根路径提供可真实调用后端的原生前端体验页。
+尚未实现收藏、聊天/联系方式治理、举报审核、密码找回和 Vue 前端；根路径提供可真实调用后端的原生前端体验页。AI 已实现可降级的文本辅助发布，图片识别、语义搜索等更复杂能力尚未实现。
