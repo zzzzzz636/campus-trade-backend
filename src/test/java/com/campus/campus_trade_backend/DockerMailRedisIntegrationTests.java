@@ -36,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
         "spring.datasource.password=",
         "spring.sql.init.mode=always",
         "spring.sql.init.schema-locations=classpath:db/schema.sql",
+        "spring.flyway.enabled=false",
         "mybatis.configuration.map-underscore-to-camel-case=true",
         "spring.data.redis.url=redis://127.0.0.1:6379",
         "spring.mail.host=127.0.0.1",

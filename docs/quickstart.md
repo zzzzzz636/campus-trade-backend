@@ -13,34 +13,41 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 
 启动后访问 `http://localhost:8080/`。登录后进入商品广场，可搜索、发布多图商品、下架和选购；右上角进入个人中心，查看买入、卖出订单及自己发布的商品状态。Swagger UI 为 `http://localhost:8080/swagger-ui.html`。商品 API 为 `http://localhost:8080/api/products?page=1&size=10&q=教材`，`page` 从 1 开始，`size` 范围为 1–50，`q` 最长 100 字。
 
-## 启动 Redis 与本地邮件服务
+## 启动完整开发基础设施
 
-Docker Desktop 运行后，在项目目录执行：
+Docker Desktop 运行后，先复制变量模板。`.env` 已被 Git 忽略，只供本机 Docker Compose 读取：
+
+```powershell
+Copy-Item .env.example .env
+notepad .env
+```
+
+至少将 `CAMPUS_DB_PASSWORD`、`CAMPUS_DB_ROOT_PASSWORD` 和 `CAMPUS_JWT_SECRET` 的占位值改掉。然后启动 MySQL、Redis 和 Mailpit：
 
 ```powershell
 docker compose -f docker-compose.dev.yml up -d
 docker compose -f docker-compose.dev.yml ps
 ```
 
-Redis 位于 `127.0.0.1:6379`；Mailpit SMTP 位于 `127.0.0.1:1025`，邮件界面为 `http://localhost:8025/`。Mailpit 只用于本地验证真实 SMTP 调用，不会把邮件投递到互联网。
+Docker MySQL 默认位于 `127.0.0.1:3307`，避免与 Windows 本机 MySQL 的 3306 冲突；Redis 位于 `127.0.0.1:6379`；Mailpit SMTP 位于 `127.0.0.1:1025`，邮件界面为 `http://localhost:8025/`。三者都使用命名卷，重建普通容器不会删除数据。Mailpit 只用于本地验证真实 SMTP 调用，不会把邮件投递到互联网。
 
 ## 切换到 MySQL
 
-已执行过原始 `schema.sql` 时不要重跑。按顺序确认已执行 `src/main/resources/db/mysql-v1-extra.sql`、`mysql-v2-order.sql`，再执行一次 `mysql-v2-images.sql`。项目账号 `campus_trade` 需要 `SELECT`、`INSERT`、`UPDATE`、`DELETE` 权限。
+V3 使用 Flyway 管理 MySQL 表结构：
 
-从新的 PowerShell 启动 MySQL 配置时，先进入 `E:\campus-trade-backend` 并在同一终端运行：
+- 对全新的空数据库，应用首次启动会自动执行 `V1__create_v2_baseline_schema.sql` 和 `V2__seed_categories.sql`。
+- 对已经手工完成 V2 三份旧 SQL 的非空数据库，Flyway 会登记一个版本 2 基线，不会重建表或删除数据。首次接管前应备份，并确认 `app_user`、`category`、`product`、`product_image`、`trade_order` 五张表均存在。
+- 接入 Flyway 后不要再重跑 `schema.sql`、`mysql-v1-extra.sql`、`mysql-v2-order.sql` 或 `mysql-v2-images.sql`。后续结构变化只增加新的版本迁移文件。
+
+从新的 PowerShell 启动 Docker MySQL 配置时，先读取 `.env` 中你设置的值并在同一终端运行。以下密码和 JWT 示例必须替换为 `.env` 中的实际本机值：
 
 ```powershell
 $env:JAVA_HOME='C:\Users\zw\.jdks\ms-17.0.19'
 $env:Path="$env:JAVA_HOME\bin;$env:Path"
+$env:CAMPUS_DB_URL='jdbc:mysql://127.0.0.1:3307/campus_trade?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai'
 $env:CAMPUS_DB_USER='campus_trade'
-$secret = Read-Host '请输入 campus_trade 数据库密码' -AsSecureString
-$env:CAMPUS_DB_PASSWORD = [System.Net.NetworkCredential]::new('', $secret).Password
-$generator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-$keyBytes = New-Object byte[] 32
-$generator.GetBytes($keyBytes)
-$generator.Dispose()
-$env:CAMPUS_JWT_SECRET = [Convert]::ToBase64String($keyBytes)
+$env:CAMPUS_DB_PASSWORD='填写 .env 中的 CAMPUS_DB_PASSWORD'
+$env:CAMPUS_JWT_SECRET='填写 .env 中的 Base64 密钥'
 $env:CAMPUS_REDIS_URL='redis://127.0.0.1:6379'
 $env:CAMPUS_SMTP_HOST='127.0.0.1'
 $env:CAMPUS_SMTP_PORT='1025'
@@ -50,7 +57,18 @@ $env:CAMPUS_SMTP_FROM='noreply@campustrade.local'
 .\mvnw.cmd spring-boot:run '-Dspring-boot.run.arguments=--spring.profiles.active=mysql'
 ```
 
-此处 JWT 密钥只在当前进程中保存；重新生成后旧令牌失效。正式部署需用安全保存的固定密钥。不要把密码或密钥写入仓库。IDEA Community 也可运行主类：JRE 设为 17，Program arguments 填 `--spring.profiles.active=mysql`，Environment variables 填 `CAMPUS_DB_USER`、`CAMPUS_DB_PASSWORD`、`CAMPUS_JWT_SECRET`。
+`.env` 不会被 Spring Boot 或 IDEA 自动加载。IDEA Community 也可运行主类：JRE 设为 17，Program arguments 填 `--spring.profiles.active=mysql`，Environment variables 至少填写 `CAMPUS_DB_URL`、`CAMPUS_DB_USER`、`CAMPUS_DB_PASSWORD`、`CAMPUS_JWT_SECRET`，以及 Redis/SMTP 变量。正式部署需安全保存固定 JWT 密钥；重新生成密钥会使旧令牌失效。不要把密码或密钥写入仓库。
+
+## 执行真实 MySQL 集成测试
+
+Docker Desktop 运行时可执行：
+
+```powershell
+$env:JAVA_HOME='C:\Users\zw\.jdks\ms-17.0.19'
+.\mvnw.cmd '-Dcampus.mysql.tests=true' '-Dtest=MySqlOrderConcurrencyIntegrationTests' test
+```
+
+测试会临时启动一个隔离的 MySQL 8.4 容器，验证 Flyway 建表和索引，并让 8 个线程同时购买同一商品，断言最多只有一笔有效订单。测试容器退出后自动清理，不使用或修改本机业务数据库。普通 `mvnw test` 不会启动该容器测试。
 
 ## 第一版接口
 

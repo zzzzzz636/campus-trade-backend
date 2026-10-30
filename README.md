@@ -1,6 +1,6 @@
 # CampusTrade
 
-CampusTrade 是一个面向高校学生的模块化单体二手交易平台。当前 V2 使用 Java 17、Spring Boot 4.1、Spring Security、JWT、MyBatis、MySQL/H2、Redis、SMTP、Docker Compose 和原生 HTML/CSS/JavaScript。
+CampusTrade 是一个面向高校学生的模块化单体二手交易平台。当前正在 `feature/v3-resume-readiness` 分支进行 V3 工程化升级，使用 Java 17、Spring Boot 4.1、Spring Security、JWT、MyBatis、MySQL/H2、Redis、SMTP、Docker Compose、Flyway 和原生 HTML/CSS/JavaScript。
 
 ## V2 已实现
 
@@ -15,6 +15,8 @@ CampusTrade 是一个面向高校学生的模块化单体二手交易平台。�
 ## 快速入口
 
 - 运行说明：[`docs/quickstart.md`](docs/quickstart.md)
+- V3 现状审计：[`docs/V3_AUDIT.md`](docs/V3_AUDIT.md)
+- V3 第一阶段记录：[`docs/V3_PHASE1.md`](docs/V3_PHASE1.md)
 - V2 技术设计：[`docs/V2_TECHNICAL_NOTES.md`](docs/V2_TECHNICAL_NOTES.md)
 - 页面：`http://localhost:8080/`
 - Swagger UI：`http://localhost:8080/swagger-ui.html`
@@ -28,6 +30,6 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 .\mvnw.cmd test
 ```
 
-普通测试使用独立 H2 数据库。Docker Redis/Mailpit 可用时，`DockerMailRedisIntegrationTests` 会执行真实 Redis + SMTP 流程；服务未运行时该测试会明确跳过。
+普通测试使用独立 H2 数据库。Docker Redis/Mailpit 可用时，`DockerMailRedisIntegrationTests` 会执行真实 Redis + SMTP 流程；服务未运行时该测试会明确跳过。显式加入 `-Dcampus.mysql.tests=true` 可执行 Testcontainers MySQL 8.4 迁移与订单并发测试，详见快速运行文档。
 
 > 不要将数据库密码、JWT 密钥或 SMTP 授权码提交到仓库。`.env` 已被忽略，`.env.example` 只提供变量名称。

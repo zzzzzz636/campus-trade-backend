@@ -1,0 +1,147 @@
+package com.campus.campus_trade_backend;
+
+import com.campus.campus_trade_backend.order.service.OrderService;
+import com.campus.campus_trade_backend.product.dto.ConditionLevel;
+import com.campus.campus_trade_backend.product.dto.CreateProductRequest;
+import com.campus.campus_trade_backend.product.service.ProductService;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.web.server.ResponseStatusException;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.mysql.MySQLContainer;
+import org.testcontainers.utility.DockerImageName;
+
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+@Testcontainers(disabledWithoutDocker = true)
+@EnabledIfSystemProperty(named = "campus.mysql.tests", matches = "true")
+@ActiveProfiles("mysql")
+@SpringBootTest(properties = {
+        "CAMPUS_JWT_SECRET=QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE=",
+        "spring.flyway.baseline-on-migrate=false",
+        "spring.data.redis.url=redis://127.0.0.1:6379",
+        "spring.mail.host=127.0.0.1",
+        "spring.mail.port=1025",
+        "spring.mail.properties.mail.smtp.auth=false",
+        "spring.mail.properties.mail.smtp.starttls.enable=false",
+        "campus.mail.from=noreply@campustrade.local"
+})
+class MySqlOrderConcurrencyIntegrationTests {
+    @Container
+    @ServiceConnection
+    static final MySQLContainer MYSQL = new MySQLContainer(DockerImageName.parse("mysql:8.4"))
+            .withDatabaseName("campus_trade")
+            .withUsername("campus_trade")
+            .withPassword("integration-test-only");
+
+    @Autowired ProductService productService;
+    @Autowired OrderService orderService;
+    @Autowired JdbcTemplate jdbc;
+
+    @Test
+    void flywayCreatesCurrentSchemaAndRequiredIndexes() {
+        assertEquals(2L, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1", Long.class));
+        assertEquals(5L, jdbc.queryForObject("SELECT COUNT(*) FROM category", Long.class));
+        assertTrue(indexExists("product", "idx_product_status_created_id"));
+        assertTrue(indexExists("trade_order", "uq_order_buyer_request"));
+        assertTrue(indexExists("product_image", "idx_product_image_product"));
+    }
+
+    @Test
+    @Timeout(45)
+    void innodbAllowsOnlyOneBuyerAndRollsBackDuplicateRequestReservation() throws Exception {
+        long sellerId = user("mysql-seller");
+        long productId = product(sellerId, "MySQL 并发商品");
+        List<Long> buyers = new ArrayList<>();
+        for (int i = 0; i < 8; i++) buyers.add(user("mysql-buyer-" + i));
+
+        var executor = Executors.newFixedThreadPool(buyers.size());
+        CountDownLatch ready = new CountDownLatch(buyers.size());
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            List<Future<Boolean>> futures = new ArrayList<>();
+            for (long buyerId : buyers) {
+                futures.add(executor.submit(() -> {
+                    ready.countDown();
+                    start.await();
+                    try {
+                        orderService.create(productId, buyerId, UUID.randomUUID().toString());
+                        return true;
+                    } catch (ResponseStatusException exception) {
+                        assertEquals(HttpStatus.CONFLICT, exception.getStatusCode());
+                        return false;
+                    }
+                }));
+            }
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+            long successes = 0;
+            for (Future<Boolean> future : futures) if (future.get(30, TimeUnit.SECONDS)) successes++;
+            assertEquals(1, successes);
+            assertEquals(1L, jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM trade_order WHERE product_id = ? AND status = 'PENDING_MEETUP'",
+                    Long.class, productId));
+            assertEquals("RESERVED", jdbc.queryForObject(
+                    "SELECT status FROM product WHERE id = ?", String.class, productId));
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+
+        long firstProduct = product(sellerId, "幂等请求商品一");
+        long secondProduct = product(sellerId, "幂等请求商品二");
+        long retryBuyer = user("mysql-idempotent-buyer");
+        String requestKey = UUID.randomUUID().toString();
+        orderService.create(firstProduct, retryBuyer, requestKey);
+
+        ResponseStatusException duplicate = assertThrows(ResponseStatusException.class,
+                () -> orderService.create(secondProduct, retryBuyer, requestKey));
+        assertEquals(HttpStatus.CONFLICT, duplicate.getStatusCode());
+        assertEquals("ON_SALE", jdbc.queryForObject(
+                "SELECT status FROM product WHERE id = ?", String.class, secondProduct));
+        assertEquals(0L, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM trade_order WHERE product_id = ?", Long.class, secondProduct));
+    }
+
+    private long user(String nickname) {
+        String email = UUID.randomUUID() + "@example.invalid";
+        jdbc.update("""
+                INSERT INTO app_user (email, password_hash, nickname, status, created_at)
+                VALUES (?, 'integration-test-only', ?, 'ACTIVE', CURRENT_TIMESTAMP)
+                """, email, nickname);
+        return jdbc.queryForObject("SELECT id FROM app_user WHERE email = ?", Long.class, email);
+    }
+
+    private long product(long sellerId, String title) {
+        return productService.create(new CreateProductRequest(1L, title, "MySQL InnoDB 集成测试",
+                new BigDecimal("39.00"), ConditionLevel.GOOD), sellerId);
+    }
+
+    private boolean indexExists(String table, String index) {
+        Long count = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.statistics
+                WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?
+                """, Long.class, table, index);
+        return count != null && count > 0;
+    }
+}
