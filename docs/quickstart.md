@@ -11,7 +11,7 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 .\mvnw.cmd spring-boot:run
 ```
 
-启动后访问 `http://localhost:8080/`。登录后进入商品广场，可搜索、发布多图商品、下架和选购；右上角进入个人中心，查看买入、卖出订单及自己发布的商品状态。Swagger UI 为 `http://localhost:8080/swagger-ui.html`。商品 API 为 `http://localhost:8080/api/products?page=1&size=10&q=教材`，`page` 从 1 开始，`size` 范围为 1–50，`q` 最长 100 字。
+启动后访问 `http://localhost:8080/`。登录后进入商品广场，可搜索、筛选和选购公开在售商品；“发布闲置”负责创建商品；右上角个人中心负责管理自己的发布、查看买入订单和卖出订单。商品广场不直接提供编辑和下架，管理入口统一位于“我发布的”。Swagger UI 为 `http://localhost:8080/swagger-ui.html`。商品 API 为 `http://localhost:8080/api/products?page=1&size=10&q=教材`，`page` 从 1 开始，`size` 范围为 1–50，`q` 最长 100 字。
 
 ## 启动完整开发基础设施
 
@@ -84,6 +84,17 @@ $env:JAVA_HOME='C:\Users\zw\.jdks\ms-17.0.19'
 ```
 
 测试会临时启动一个隔离的 MySQL 8.4 容器，验证 Flyway 建表和索引，并让 8 个线程同时购买同一商品，断言最多只有一笔有效订单。测试容器退出后自动清理，不使用或修改本机业务数据库。普通 `mvnw test` 不会启动该容器测试。
+
+## 执行 V4 浏览器业务闭环测试
+
+Windows 已安装 Microsoft Edge 时可执行：
+
+```powershell
+$env:JAVA_HOME='C:\Users\zw\.jdks\ms-17.0.19'
+.\mvnw.cmd '-Dtest=V4BrowserFlowTests' test
+```
+
+该测试会启动随机端口的后端和隔离 H2 数据库，使用两个互相隔离的 Edge 会话完成 A 发布、B 浏览和下单、跨账号修改被拒绝、A 查看售出订单、B 确认成交、刷新身份恢复和退出后 401。它不会操作本机 MySQL 业务数据，也不会发送真实邮件。首次解析 Playwright Java 依赖需要下载较大的 Maven 组件；运行时复用本机 Edge，不额外下载 Chromium。非 Windows 环境会跳过此用例。
 
 ## 第一版接口
 
