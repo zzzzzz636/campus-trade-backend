@@ -1,4 +1,4 @@
-const state = { token: '', user: null, view: 'home', page: 1, query: '', categoryId: '', minPrice: '', maxPrice: '', sort: 'NEWEST', total: 0, categories: new Map(), selected: null, editingProduct: null, loadId: 0, pendingImages: [] };
+const state = { token: '', user: null, view: 'home', page: 1, query: '', categoryId: '', minPrice: '', maxPrice: '', sort: 'NEWEST', total: 0, categories: new Map(), selected: null, editingProduct: null, editReturnView: 'home', loadId: 0, pendingImages: [] };
 const $ = id => document.getElementById(id);
 const money = value => `¥${Number(value).toFixed(2)}`;
 const conditionName = { NEW: '全新', LIKE_NEW: '近新', GOOD: '良好', FAIR: '可用' };
@@ -283,7 +283,8 @@ async function openDetail(id) {
     const product = await api(`/api/products/${id}`);
     state.selected = product;
     const own = Number(state.user.id) === Number(product.sellerId);
-    renderDetailImages(product, own);
+    const managingFromProfile = own && state.view === 'profile';
+    renderDetailImages(product, managingFromProfile && product.status === 'ON_SALE');
     $('detail-category').textContent = displayCategory(product);
     $('detail-title').textContent = product.title;
     $('detail-seller').textContent = `发布者 · ${product.sellerNickname || '校园同学'}`;
@@ -295,17 +296,29 @@ async function openDetail(id) {
     actions.replaceChildren();
     if (product.status === 'ON_SALE') {
       if (own) {
-        const editButton = el('button', '编辑商品信息', 'primary secondary-action');
-        editButton.type = 'button';
-        editButton.addEventListener('click', () => startEdit(product));
-        const downButton = el('button', '下架这件商品', 'primary danger');
-        downButton.type = 'button';
-        downButton.addEventListener('click', async () => {
-          downButton.disabled = true;
-          try { await takeDown(product.id); }
-          catch (error) { toast(`操作失败：${error.message}`, true); downButton.disabled = false; }
-        });
-        actions.append(editButton, downButton);
+        if (managingFromProfile) {
+          const editButton = el('button', '编辑商品信息', 'primary secondary-action');
+          editButton.type = 'button';
+          editButton.addEventListener('click', () => startEdit(product));
+          const downButton = el('button', '下架这件商品', 'primary danger');
+          downButton.type = 'button';
+          downButton.addEventListener('click', async () => {
+            downButton.disabled = true;
+            try { await takeDown(product.id); }
+            catch (error) { toast(`操作失败：${error.message}`, true); downButton.disabled = false; }
+          });
+          actions.append(editButton, downButton);
+        } else {
+          const tip = el('p', '这是你发布的商品，请前往个人中心管理。', 'detail-owner-tip');
+          const manageButton = el('button', '前往“我发布的”', 'primary secondary-action');
+          manageButton.type = 'button';
+          manageButton.addEventListener('click', () => {
+            closeDetail();
+            profileTab('listings');
+            navigate('profile');
+          });
+          actions.append(tip, manageButton);
+        }
       } else {
         const button = el('button', '选择商品，创建线下面交订单', 'primary');
         button.type = 'button';
@@ -344,6 +357,7 @@ function setPublishMode(product = null) {
   $('publish-subtitle').textContent = editing ? '只有在售商品可以修改；图片可在商品详情中继续管理。' : '写清楚物品情况，方便同学了解。发布后会出现在商品广场。';
   $('publish-form-tip').textContent = editing ? '选择的新照片会追加到现有图片中，最多仍为 6 张。' : '发布前可以预览并移除已选择的照片。';
   $('publish-submit').textContent = editing ? '保存修改 →' : '确认发布 →';
+  $('publish-back').textContent = editing ? '← 返回我的发布' : '← 返回商品广场';
   $('ai-draft-panel').hidden = editing;
 }
 
@@ -353,6 +367,7 @@ function clearPendingImages() {
 }
 
 function startCreate() {
+  state.editReturnView = 'home';
   setPublishMode();
   $('publish-form').reset();
   clearPendingImages();
@@ -364,6 +379,11 @@ function startEdit(product) {
     toast('只有在售商品可以编辑', true);
     return;
   }
+  if (Number(product.sellerId) !== Number(state.user.id)) {
+    toast('只能编辑自己发布的商品', true);
+    return;
+  }
+  state.editReturnView = 'profile';
   setPublishMode(product);
   const form = $('publish-form');
   form.elements.categoryId.value = String(product.categoryId);
@@ -459,7 +479,7 @@ function renderListings(products) {
     if (product.createdAt) body.append(el('p', `发布于 ${dateTime(product.createdAt)}`));
     const side = el('div', '', 'list-side');
     side.append(el('strong', money(product.price)), el('span', statusName[product.status] || product.status, statusStyle(product.status)));
-    const manage = el('button', '查看 / 管理图片', 'row-action');
+    const manage = el('button', product.status === 'ON_SALE' ? '查看 / 管理图片' : '查看商品详情', 'row-action');
     manage.type = 'button';
     manage.addEventListener('click', () => openDetail(product.id));
     side.append(manage);
@@ -526,7 +546,7 @@ $('send-code').addEventListener('click', async () => {
         button.textContent = `${remaining} 秒后重试`;
       }
     }, 1000);
-    toast(result.mode === 'SMTP' ? '验证码邮件已发送，请检查邮箱' : '本地验证码已生成，请查看后端控制台');
+    toast(result.deliveryMode === 'SMTP' ? '验证码邮件已发送，请检查邮箱' : '本地验证码已生成，请查看后端控制台');
   } catch (error) {
     button.disabled = false;
     toast(`验证码发送失败：${error.message}`, true);
@@ -567,7 +587,13 @@ $('brand-home').addEventListener('click', () => navigate('home'));
 $('nav-home').addEventListener('click', () => navigate('home'));
 $('nav-publish').addEventListener('click', startCreate);
 $('home-publish').addEventListener('click', startCreate);
-$('publish-back').addEventListener('click', () => { setPublishMode(); clearPendingImages(); navigate('home'); });
+$('publish-back').addEventListener('click', () => {
+  const returnView = state.editingProduct ? state.editReturnView : 'home';
+  setPublishMode();
+  clearPendingImages();
+  if (returnView === 'profile') profileTab('listings');
+  navigate(returnView);
+});
 $('nav-profile').addEventListener('click', () => navigate('profile'));
 $('logout').addEventListener('click', () => logout());
 $('tab-purchases').addEventListener('click', () => profileTab('purchases'));
@@ -719,7 +745,9 @@ $('publish-form').addEventListener('submit', async event => {
     $('min-price-filter').value = '';
     $('max-price-filter').value = '';
     $('sort-filter').value = 'NEWEST';
-    navigate('home');
+    const returnView = editing ? state.editReturnView : 'home';
+    if (returnView === 'profile') profileTab('listings');
+    navigate(returnView);
     await loadProducts();
     toast(uploadError
       ? `商品 #${productId} 信息已保存，但图片上传失败：${uploadError.message}。可在个人中心重试。`
