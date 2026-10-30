@@ -1,0 +1,33 @@
+# CampusTrade
+
+CampusTrade 是一个面向高校学生的模块化单体二手交易平台。当前 V2 使用 Java 17、Spring Boot 4.1、Spring Security、JWT、MyBatis、MySQL/H2、Redis、SMTP、Docker Compose 和原生 HTML/CSS/JavaScript。
+
+## V2 已实现
+
+- 邮箱验证码注册、登录、JWT 鉴权和禁用账号令牌即时失效。
+- 商品发布、搜索、分页、详情、个人发布列表和下架。
+- 单商品最多 6 张 JPEG/PNG/WebP 图片；真实文件头、大小和权限校验；本地存储可替换。
+- 买家下单、取消、确认成交；卖家查看收到的订单；商品状态与订单状态保持一致。
+- 条件更新防止并发重复购买，请求标识防止重复下单。
+- Redis 验证码 TTL、发送冷却、错误次数限制和成功后防重放。
+- Mailpit 本地 SMTP 联调、统一异常响应、Swagger UI 和自动化测试。
+
+## 快速入口
+
+- 运行说明：[`docs/quickstart.md`](docs/quickstart.md)
+- V2 技术设计：[`docs/V2_TECHNICAL_NOTES.md`](docs/V2_TECHNICAL_NOTES.md)
+- 页面：`http://localhost:8080/`
+- Swagger UI：`http://localhost:8080/swagger-ui.html`
+- Mailpit：`http://localhost:8025/`
+
+## 测试
+
+```powershell
+$env:JAVA_HOME='C:\Users\zw\.jdks\ms-17.0.19'
+$env:Path="$env:JAVA_HOME\bin;$env:Path"
+.\mvnw.cmd test
+```
+
+普通测试使用独立 H2 数据库。Docker Redis/Mailpit 可用时，`DockerMailRedisIntegrationTests` 会执行真实 Redis + SMTP 流程；服务未运行时该测试会明确跳过。
+
+> 不要将数据库密码、JWT 密钥或 SMTP 授权码提交到仓库。`.env` 已被忽略，`.env.example` 只提供变量名称。

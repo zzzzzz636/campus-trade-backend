@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CampusTrade · 校园闲置交易</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <main id="auth-view" class="auth-layout">
+    <section class="auth-intro">
+      <div class="brand"><span class="brand-mark">C</span><span>CampusTrade</span></div>
+      <div class="auth-copy">
+        <span class="eyebrow">让闲置，在校园里继续发光</span>
+        <h1>好东西，<br>值得遇见<br><span>下一位主人。</span></h1>
+        <p>发布你不再需要的物品，也发现身边同学的好物。校内沟通，线下面交。</p>
+        <div class="auth-art" aria-hidden="true"><span>📚</span><span>🎧</span><span>💡</span></div>
+      </div>
+      <p class="auth-foot">CampusTrade · 校园二手交易</p>
+    </section>
+    <section class="auth-form-wrap">
+      <div class="auth-box">
+        <span class="eyebrow">WELCOME TO CAMPUSTRADE</span>
+        <h2 id="auth-title">欢迎回来</h2>
+        <p class="subtle" id="auth-subtitle">登录后浏览校园里的闲置好物</p>
+        <div class="auth-tabs" role="tablist" aria-label="账号操作">
+          <button id="show-login" class="auth-tab active" type="button">登录</button>
+          <button id="show-register" class="auth-tab" type="button">注册</button>
+        </div>
+        <form id="login-form" class="stack-form">
+          <label>邮箱地址<input name="email" type="email" autocomplete="email" placeholder="name@school.edu" required></label>
+          <label>密码<input name="password" type="password" autocomplete="current-password" placeholder="请输入密码" required></label>
+          <button class="primary full" type="submit">登录并进入商品广场 <span aria-hidden="true">→</span></button>
+        </form>
+        <form id="register-form" class="stack-form" hidden>
+          <label>昵称<input name="nickname" maxlength="80" autocomplete="nickname" placeholder="大家怎么称呼你" required></label>
+          <label>邮箱地址<input name="email" type="email" autocomplete="email" placeholder="name@school.edu" required></label>
+          <label>邮箱验证码
+            <span class="verification-row">
+              <input name="code" type="text" inputmode="numeric" autocomplete="one-time-code" minlength="6" maxlength="6" pattern="[0-9]{6}" placeholder="六位数字" required>
+              <button id="send-code" class="outline-btn" type="button">获取验证码</button>
+            </span>
+          </label>
+          <label>密码<input name="password" type="password" minlength="8" maxlength="72" autocomplete="new-password" placeholder="至少 8 位" required></label>
+          <button class="primary full" type="submit">注册并进入商品广场 <span aria-hidden="true">→</span></button>
+        </form>
+        <p class="auth-tip">交易以校内线下面交为主，当前版本不接入支付。</p>
+      </div>
+    </section>
+  </main>
+
+  <div id="app-view" hidden>
+    <header class="site-header">
+      <div class="header-inner">
+        <button class="brand brand-button" id="brand-home" type="button" aria-label="返回商品广场"><span class="brand-mark">C</span><span>CampusTrade</span></button>
+        <nav class="main-nav" aria-label="主导航">
+          <button id="nav-home" class="nav-item active" type="button">商品广场</button>
+          <button id="nav-publish" class="nav-item" type="button">发布闲置</button>
+        </nav>
+        <button id="nav-profile" class="profile-link" type="button"><span id="header-avatar" class="avatar">同</span><span>个人中心</span><span class="chevron" aria-hidden="true">›</span></button>
+      </div>
+    </header>
+
+    <section id="home-view" class="page-shell">
+      <div class="hero">
+        <div class="hero-copy"><span class="eyebrow light">CAMPUS MARKETPLACE</span><h1>在校园，发现<br><em>刚刚好的好物。</em></h1><p>从一页教材到一盏台灯，让每件闲置都找到新故事。</p></div>
+        <div class="hero-art" aria-hidden="true"><span class="art-book">📚</span><span class="art-lamp">💡</span><span class="art-bag">🎒</span></div>
+      </div>
+
+      <div class="section-heading"><div><span class="eyebrow">EXPLORE</span><h2>逛逛同学们的闲置</h2><p>不同发布者的商品都在这里，按最新发布排序。</p></div><button id="home-publish" class="outline-btn" type="button">＋ 发布我的闲置</button></div>
+      <form id="search-form" class="search-form" role="search"><span class="search-icon" aria-hidden="true">⌕</span><input id="search-input" name="q" type="search" maxlength="100" placeholder="搜索教材、数码、生活用品…" aria-label="搜索商品"><button class="primary" type="submit">搜索商品</button></form>
+      <div class="result-bar"><span id="result-label">正在加载商品…</span><button id="clear-search" class="text-button" type="button" hidden>清除搜索</button></div>
+      <div id="products" class="product-grid"></div>
+      <div class="pager"><button id="prev-page" class="outline-btn" type="button">上一页</button><span id="page-label">第 1 页</span><button id="next-page" class="outline-btn" type="button">下一页</button></div>
+    </section>
+
+    <section id="publish-view" class="page-shell inner-page" hidden>
+      <button class="back-link" id="publish-back" type="button">← 返回商品广场</button>
+      <div class="page-title"><span class="eyebrow">SELL AN ITEM</span><h1>发布你的闲置</h1><p>写清楚物品情况，方便同学了解。发布后会出现在商品广场。</p></div>
+      <div class="form-panel"><form id="publish-form" class="stack-form">
+        <div class="form-row"><label>商品分类<select name="categoryId" id="category-select" required></select></label><label>商品成色<select name="conditionLevel"><option value="NEW">全新</option><option value="LIKE_NEW">近新</option><option value="GOOD">良好</option><option value="FAIR">可用</option></select></label></div>
+        <label>商品标题<input name="title" maxlength="120" placeholder="例如：高等数学教材，九成新" required></label>
+        <label>商品描述<textarea name="description" maxlength="5000" placeholder="使用情况、瑕疵、交付方式…" required></textarea></label>
+        <label>期望价格（元）<input name="price" type="number" min="0.01" max="99999999.99" step="0.01" placeholder="0.00" required></label>
+        <label class="upload-field">商品照片（最多 6 张）
+          <input id="product-images" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+          <span class="subtle">支持 JPEG、PNG、WebP，单张不超过 5 MB；第一张将作为封面。</span>
+        </label>
+        <div id="image-preview" class="image-preview" aria-live="polite"></div>
+        <div class="form-footer"><span class="subtle">发布前可以预览并移除已选择的照片。</span><button class="primary" type="submit">确认发布 →</button></div>
+      </form></div>
+    </section>
+
+    <section id="profile-view" class="page-shell inner-page" hidden>
+      <div class="profile-banner"><div id="profile-avatar" class="avatar large">同</div><div><span class="eyebrow light">MY CAMPUS SPACE</span><h1 id="profile-name">个人中心</h1><p id="profile-email"></p></div><button id="logout" class="white-outline" type="button">退出登录</button></div>
+      <div class="profile-tabs" role="tablist" aria-label="个人中心内容"><button id="tab-purchases" class="profile-tab active" type="button">我买到的 <span id="purchase-count">0</span></button><button id="tab-sales" class="profile-tab" type="button">我卖出的 <span id="sales-count">0</span></button><button id="tab-listings" class="profile-tab" type="button">我发布的 <span id="listing-count">0</span></button></div>
+      <div id="purchases-pane" class="profile-list"></div>
+      <div id="sales-pane" class="profile-list" hidden></div>
+      <div id="listings-pane" class="profile-list" hidden></div>
+    </section>
+
+    <footer class="site-footer">CampusTrade · 让校园闲置流转起来 <span>第一版体验 · 线下面交</span></footer>
+  </div>
+
+  <div id="detail-overlay" class="overlay" hidden>
+    <div class="overlay-backdrop" id="detail-backdrop"></div>
+    <section class="detail-drawer" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+      <button id="close-detail" class="close-button" type="button" aria-label="关闭商品详情">×</button>
+      <div id="detail-cover" class="detail-cover" aria-hidden="true">🛍️</div>
+      <div id="detail-images" class="detail-images"></div>
+      <div class="detail-content"><span id="detail-category" class="tag"></span><h2 id="detail-title"></h2><p id="detail-seller" class="subtle"></p><strong id="detail-price" class="detail-price"></strong><div class="detail-divider"></div><h3>商品说明</h3><p id="detail-description" class="detail-description"></p><p id="detail-condition" class="subtle"></p><div id="detail-actions" class="detail-actions"></div></div>
+    </section>
+  </div>
+</body>
+</html>

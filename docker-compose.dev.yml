@@ -1,0 +1,30 @@
+services:
+  redis:
+    image: redis:7.4-alpine
+    container_name: campus-trade-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - campus-trade-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    container_name: campus-trade-mailpit
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+    environment:
+      MP_MAX_MESSAGES: "500"
+      MP_DATABASE: /data/mailpit.db
+    volumes:
+      - campus-trade-mailpit-data:/data
+
+volumes:
+  campus-trade-redis-data:
+  campus-trade-mailpit-data:
