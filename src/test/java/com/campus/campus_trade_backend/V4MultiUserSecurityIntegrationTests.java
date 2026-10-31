@@ -140,6 +140,9 @@ class V4MultiUserSecurityIntegrationTests {
                 .andExpect(status().isOk());
 
         long completedOrderId = orderId(productId, buyer.token());
+        mvc.perform(post("/api/orders/{id}/accept", completedOrderId)
+                        .header("Authorization", bearer(seller.token())))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("WAITING_HANDOFF"));
         mvc.perform(post("/api/orders/{id}/complete", completedOrderId)
                         .header("Authorization", bearer(buyer.token())))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("COMPLETED"));

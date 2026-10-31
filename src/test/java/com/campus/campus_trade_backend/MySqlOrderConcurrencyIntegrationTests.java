@@ -158,6 +158,51 @@ class MySqlOrderConcurrencyIntegrationTests {
         assertEquals(marker + " 已更新", order.productTitle());
     }
 
+    @Test
+    @Timeout(30)
+    void sellerAcceptAndBuyerCancelRaceLeavesOneConsistentOutcome() throws Exception {
+        long sellerId = user("mysql-race-seller");
+        long buyerId = user("mysql-race-buyer");
+        long productId = product(sellerId, "接受取消竞态商品");
+        var order = orderService.create(productId, buyerId, UUID.randomUUID().toString());
+        var executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<Boolean> accepted = executor.submit(() -> raceAction(ready, start,
+                    () -> orderService.accept(order.id(), sellerId, null)));
+            Future<Boolean> cancelled = executor.submit(() -> raceAction(ready, start,
+                    () -> orderService.cancel(order.id(), buyerId)));
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+            assertEquals(1, (accepted.get(15, TimeUnit.SECONDS) ? 1 : 0)
+                    + (cancelled.get(15, TimeUnit.SECONDS) ? 1 : 0));
+
+            String orderStatus = jdbc.queryForObject("SELECT status FROM trade_order WHERE id = ?", String.class, order.id());
+            String productStatus = jdbc.queryForObject("SELECT status FROM product WHERE id = ?", String.class, productId);
+            if ("WAITING_HANDOFF".equals(orderStatus)) assertEquals("RESERVED", productStatus);
+            else {
+                assertEquals("CANCELLED", orderStatus);
+                assertEquals("ON_SALE", productStatus);
+            }
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    private boolean raceAction(CountDownLatch ready, CountDownLatch start, Runnable action) throws Exception {
+        ready.countDown();
+        start.await();
+        try {
+            action.run();
+            return true;
+        } catch (ResponseStatusException exception) {
+            assertEquals(HttpStatus.CONFLICT, exception.getStatusCode());
+            return false;
+        }
+    }
+
     private long user(String nickname) {
         String email = UUID.randomUUID() + "@example.invalid";
         jdbc.update("""

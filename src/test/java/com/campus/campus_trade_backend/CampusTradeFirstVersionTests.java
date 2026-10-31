@@ -56,7 +56,7 @@ class CampusTradeFirstVersionTests {
         assertThrows(ResponseStatusException.class, () -> productService.takeDown(productId, buyer.id()));
 
         var order = orderService.create(productId, buyer.id());
-        assertEquals("PENDING_MEETUP", order.status());
+        assertEquals("PENDING_SELLER_CONFIRMATION", order.status());
         assertEquals(searchableTitle, orderService.listPurchases(buyer.id()).get(0).productTitle());
         assertTrue(orderService.listPurchases(seller.id()).isEmpty());
         assertEquals("RESERVED", productService.listMine(seller.id()).get(0).status());

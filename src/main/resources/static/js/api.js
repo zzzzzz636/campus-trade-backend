@@ -14,6 +14,7 @@ export async function api(path, options = {}) {
   }
   const token = getToken();
   if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (!headers.has('X-Request-Id')) headers.set('X-Request-Id', crypto.randomUUID());
 
   const response = await fetch(path, { ...options, headers });
   const raw = await response.text();
@@ -28,7 +29,12 @@ export async function api(path, options = {}) {
       throw new Error('登录已过期，请重新登录');
     }
     const detail = data && typeof data === 'object' ? (data.detail || data.message || data.title) : '';
-    throw new Error(`${response.status}${detail ? `：${detail}` : ''}`);
+    const requestId = (data && typeof data === 'object' && data.requestId) || response.headers.get('X-Request-Id');
+    const error = new Error(`${response.status}${detail ? `：${detail}` : ''}${requestId ? `（请求 ${requestId}）` : ''}`);
+    error.status = response.status;
+    error.errorCode = data && typeof data === 'object' ? data.errorCode : null;
+    error.requestId = requestId;
+    throw error;
   }
   return data;
 }

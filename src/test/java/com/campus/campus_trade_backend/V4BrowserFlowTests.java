@@ -72,7 +72,7 @@ class V4BrowserFlowTests {
 
     @Test
     @Timeout(90)
-    void twoBrowserUsersPublishBuyCompleteRefreshAndLogout() {
+    void twoBrowserUsersApplyMessageFavoriteAcceptCompleteRefreshAndLogout() {
         String marker = UUID.randomUUID().toString().substring(0, 8);
         String title = "V4 浏览器教材 " + marker;
         Page seller = sellerContext.newPage();
@@ -103,7 +103,7 @@ class V4BrowserFlowTests {
         register(buyer, "buyer-" + marker + "@example.invalid", "浏览器买家 B");
         searchAndOpen(buyer, title);
         assertThat(buyer.getByRole(AriaRole.BUTTON,
-                new Page.GetByRoleOptions().setName("选择商品，创建线下面交订单"))).isVisible();
+                new Page.GetByRoleOptions().setName("提交购买申请"))).isVisible();
         assertThat(buyer.getByRole(AriaRole.BUTTON,
                 new Page.GetByRoleOptions().setName("编辑商品信息"))).hasCount(0);
 
@@ -117,12 +117,32 @@ class V4BrowserFlowTests {
         assertEquals(403, forbidden.status());
         forbidden.dispose();
 
+        buyer.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("♡ 收藏商品")).click();
+        assertThat(buyer.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("♥ 已收藏"))).isVisible();
+
+        buyer.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("联系卖家")).click();
+        assertThat(buyer.locator("#chat-overlay")).isVisible();
+        Response message = buyer.waitForResponse(response -> response.url().contains("/api/conversations/")
+                        && response.url().endsWith("/messages") && response.request().method().equals("POST"),
+                () -> {
+                    buyer.locator("#message-form textarea").fill("请问明天下午可以面交吗？");
+                    buyer.locator("#message-form button[type=submit]").click();
+                });
+        assertEquals(201, message.status());
+        buyer.locator("#close-chat").click();
+
+        buyer.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("提交购买申请")).click();
+        assertThat(buyer.locator("#purchase-dialog")).isVisible();
+        buyer.locator("#purchase-form [name=handoffLocation]").fill("东区食堂门口");
+        buyer.locator("#purchase-form [name=buyerNote]").fill("希望明天下午交易");
         Response createOrder = buyer.waitForResponse(response ->
                         response.url().endsWith("/api/orders") && response.request().method().equals("POST"),
-                () -> buyer.getByRole(AriaRole.BUTTON,
-                        new Page.GetByRoleOptions().setName("选择商品，创建线下面交订单")).click());
+                () -> buyer.locator("#purchase-form button[type=submit]").click());
         assertEquals(201, createOrder.status());
         long orderId = objectMapper.readTree(createOrder.text()).path("id").asLong();
+        assertThat(buyer.locator("#order-overlay")).isVisible();
+        assertThat(buyer.locator("#order-detail-content")).containsText("等待卖家确认");
+        buyer.locator("#close-order-detail").click();
 
         buyer.locator("#nav-profile").click();
         assertThat(buyer.locator("#purchases-pane").getByText(title)).isVisible();
@@ -133,14 +153,31 @@ class V4BrowserFlowTests {
         seller.locator("#nav-profile").click();
         seller.locator("#tab-sales").click();
         assertThat(seller.locator("#sales-pane").getByText(title)).isVisible();
+        seller.locator("#tab-messages").click();
+        assertThat(seller.locator("#messages-pane")).containsText("请问明天下午可以面交吗？");
+        seller.locator("#tab-sales").click();
+        seller.locator("#sales-pane .order-row").filter(new Locator.FilterOptions().setHasText(title)).click();
+        assertThat(seller.locator("#order-detail-content")).containsText("等待卖家确认");
+        seller.onDialog(dialog -> dialog.accept());
+        Response accept = seller.waitForResponse(response -> response.url().endsWith("/api/orders/" + orderId + "/accept"),
+                () -> seller.getByRole(AriaRole.BUTTON,
+                        new Page.GetByRoleOptions().setName("接受购买申请")).click());
+        assertEquals(200, accept.status());
+        assertThat(seller.locator("#order-detail-content")).containsText("等待面交");
 
+        buyer.reload();
+        buyer.locator("#nav-profile").click();
+        buyer.locator("#purchases-pane .order-row").filter(new Locator.FilterOptions().setHasText(title)).click();
         buyer.onceDialog(dialog -> dialog.accept());
         Response complete = buyer.waitForResponse(response ->
                         response.url().endsWith("/api/orders/" + orderId + "/complete"),
-                () -> buyer.locator("#purchases-pane").getByRole(AriaRole.BUTTON,
-                        new Locator.GetByRoleOptions().setName("确认成交")).click());
+                () -> buyer.getByRole(AriaRole.BUTTON,
+                        new Page.GetByRoleOptions().setName("确认已面交并完成交易")).click());
         assertEquals(200, complete.status());
-        assertThat(buyer.locator("#purchases-pane")).containsText("已完成");
+        assertThat(buyer.locator("#order-detail-content")).containsText("已完成");
+        buyer.locator("#close-order-detail").click();
+        buyer.locator("#tab-favorites").click();
+        assertThat(buyer.locator("#favorites-pane").filter(new Locator.FilterOptions().setHasText(title))).containsText("已售出");
 
         seller.reload();
         seller.locator("#nav-profile").click();

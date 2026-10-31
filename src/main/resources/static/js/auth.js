@@ -104,6 +104,7 @@ async function sendVerificationCode() {
 
 async function login(event) {
   event.preventDefault();
+  const formElement = event.currentTarget;
   const form = new FormData(event.currentTarget);
   const button = event.currentTarget.querySelector('button[type="submit"]');
   button.disabled = true;
@@ -113,15 +114,17 @@ async function login(event) {
       body: JSON.stringify({ email: String(form.get('email')), password: String(form.get('password')) })
     });
     await finishLogin(result.accessToken);
-    event.currentTarget.reset();
+    formElement.reset();
     toast('登录成功，欢迎来到商品广场');
   } catch (error) {
     toast(`登录失败：${error.message}`, true);
   } finally { button.disabled = false; }
+
 }
 
 async function register(event) {
   event.preventDefault();
+  const formElement = event.currentTarget;
   const form = new FormData(event.currentTarget);
   const email = String(form.get('email'));
   const password = String(form.get('password'));
@@ -135,7 +138,7 @@ async function register(event) {
       method: 'POST', body: JSON.stringify({ email, password })
     });
     await finishLogin(result.accessToken);
-    event.currentTarget.reset();
+    formElement.reset();
     toast('注册成功，欢迎来到商品广场');
   } catch (error) {
     toast(`注册失败：${error.message}`, true);

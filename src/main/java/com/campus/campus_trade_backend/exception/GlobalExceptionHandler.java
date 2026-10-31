@@ -1,5 +1,6 @@
 package com.campus.campus_trade_backend.exception;
 
+import com.campus.campus_trade_backend.config.RequestIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
@@ -78,6 +79,22 @@ public class GlobalExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatusCode.valueOf(status), detail);
         problem.setTitle(status >= 500 ? "服务暂不可用" : "请求未完成");
         problem.setInstance(URI.create(request.getRequestURI()));
+        problem.setProperty("errorCode", errorCode(status));
+        Object requestId = request.getAttribute(RequestIdFilter.ATTRIBUTE);
+        if (requestId != null) problem.setProperty("requestId", requestId.toString());
         return problem;
+    }
+
+    private static String errorCode(int status) {
+        return switch (status) {
+            case 400 -> "VALIDATION_FAILED";
+            case 401 -> "AUTHENTICATION_REQUIRED";
+            case 403 -> "ACCESS_DENIED";
+            case 404 -> "RESOURCE_NOT_FOUND";
+            case 409 -> "STATE_CONFLICT";
+            case 413 -> "UPLOAD_TOO_LARGE";
+            case 429 -> "RATE_LIMITED";
+            default -> status >= 500 ? "INTERNAL_ERROR" : "REQUEST_FAILED";
+        };
     }
 }
