@@ -8,6 +8,9 @@ import com.campus.campus_trade_backend.auth.verification.LocalConsoleMailSender;
 import com.campus.campus_trade_backend.auth.verification.VerificationService;
 import com.campus.campus_trade_backend.auth.security.JwtService;
 import com.campus.campus_trade_backend.order.service.OrderService;
+import com.campus.campus_trade_backend.order.dto.CreateOrderRequest;
+import com.campus.campus_trade_backend.order.dto.FulfillmentType;
+import com.campus.campus_trade_backend.order.dto.ShipOrderRequest;
 import com.campus.campus_trade_backend.product.dto.ConditionLevel;
 import com.campus.campus_trade_backend.product.dto.CreateProductRequest;
 import com.campus.campus_trade_backend.product.service.ProductService;
@@ -92,12 +95,17 @@ class OrderV2IntegrationTests {
         mvc.perform(post("/api/orders/{id}/cancel", order.id()).header("Authorization", buyerToken))
                 .andExpect(status().isConflict());
         var nextOrder = orderService.create(productId, buyer.id(), key());
+        mvc.perform(post("/api/orders/{id}/accept", nextOrder.id()).header("Authorization", sellerToken)
+                        .contentType("application/json").content("{\"note\":\"校门口面交\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("WAITING_HANDOFF"));
         mvc.perform(post("/api/orders/{id}/complete", nextOrder.id()).header("Authorization", buyerToken))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("COMPLETED"));
     }
 
     @AfterEach
     void removeTestRows() {
+        for (long productId : productIds) jdbc.update("DELETE FROM app_notification WHERE reference_id IN (SELECT id FROM trade_order WHERE product_id = ?)", productId);
+        for (long productId : productIds) jdbc.update("DELETE FROM order_event WHERE order_id IN (SELECT id FROM trade_order WHERE product_id = ?)", productId);
         for (long productId : productIds) jdbc.update("DELETE FROM trade_order WHERE product_id = ?", productId);
         for (long productId : productIds) jdbc.update("DELETE FROM product WHERE id = ?", productId);
         for (long userId : userIds) jdbc.update("DELETE FROM app_user WHERE id = ?", userId);
@@ -111,7 +119,7 @@ class OrderV2IntegrationTests {
         long productId = product(seller.id());
 
         var order = orderService.create(productId, buyer.id(), key());
-        assertEquals("PENDING_MEETUP", order.status());
+        assertEquals("PENDING_SELLER_CONFIRMATION", order.status());
         assertEquals(order.id(), orderService.listSales(seller.id()).get(0).id());
         assertEquals(order.id(), orderService.listPurchases(buyer.id()).get(0).id());
         assertEquals(HttpStatus.FORBIDDEN, assertThrows(ResponseStatusException.class,
@@ -128,6 +136,7 @@ class OrderV2IntegrationTests {
                 () -> orderService.complete(order.id(), buyer.id())).getStatusCode());
 
         var nextOrder = orderService.create(productId, other.id(), key());
+        assertEquals("WAITING_HANDOFF", orderService.accept(nextOrder.id(), seller.id(), "同意面交").status());
         assertEquals("COMPLETED", orderService.complete(nextOrder.id(), other.id()).status());
         assertEquals("SOLD", productService.listMine(seller.id()).get(0).status());
         assertFalse(productService.findById(productId).isPresent());
@@ -164,7 +173,7 @@ class OrderV2IntegrationTests {
         jdbc.update("UPDATE product SET status = 'OFF_SHELF' WHERE id = ?", productId);
         assertEquals(HttpStatus.CONFLICT, assertThrows(ResponseStatusException.class,
                 () -> orderService.cancel(order.id(), buyer.id())).getStatusCode());
-        assertEquals("PENDING_MEETUP", orderService.findById(order.id(), buyer.id()).status());
+        assertEquals("PENDING_SELLER_CONFIRMATION", orderService.findById(order.id(), buyer.id()).status());
     }
 
     @Test
@@ -198,12 +207,38 @@ class OrderV2IntegrationTests {
             long successful = 0;
             for (Future<Boolean> future : futures) if (future.get(15, TimeUnit.SECONDS)) successful++;
             assertEquals(1, successful);
-            assertEquals(1L, jdbc.queryForObject("SELECT COUNT(*) FROM trade_order WHERE product_id = ? AND status = 'PENDING_MEETUP'", Long.class, productId));
+            assertEquals(1L, jdbc.queryForObject("SELECT COUNT(*) FROM trade_order WHERE product_id = ? AND status = 'PENDING_SELLER_CONFIRMATION'", Long.class, productId));
             assertEquals("RESERVED", jdbc.queryForObject("SELECT status FROM product WHERE id = ?", String.class, productId));
         } finally {
             start.countDown();
             executor.shutdownNow();
         }
+    }
+
+    @Test
+    void shippingOrderRequiresSellerAcceptanceAndShipmentBeforeReceipt() {
+        UserResponse seller = user("快递卖家");
+        UserResponse buyer = user("快递买家");
+        UserResponse other = user("无关用户");
+        long productId = product(seller.id());
+        var request = new CreateOrderRequest(productId, key(), FulfillmentType.SHIPPING,
+                "请包好一点", null, "张同学", "13800000000", "测试大学 1 号宿舍");
+
+        var order = orderService.create(request, buyer.id());
+        assertEquals("PENDING_SELLER_CONFIRMATION", order.status());
+        assertEquals(HttpStatus.CONFLICT, assertThrows(ResponseStatusException.class,
+                () -> orderService.complete(order.id(), buyer.id())).getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, assertThrows(ResponseStatusException.class,
+                () -> orderService.accept(order.id(), other.id(), null)).getStatusCode());
+        // 未接受前不向卖家暴露收货地址；接受后才用于履约。
+        assertEquals(null, orderService.findDetail(order.id(), seller.id()).shippingAddress());
+        assertEquals("WAITING_SHIPMENT", orderService.accept(order.id(), seller.id(), "今晚发出").status());
+        assertEquals("测试大学 1 号宿舍", orderService.findDetail(order.id(), seller.id()).shippingAddress());
+        assertEquals("SHIPPED", orderService.ship(order.id(), seller.id(),
+                new ShipOrderRequest("校园快递", "CT20260001")).status());
+        assertEquals("COMPLETED", orderService.complete(order.id(), buyer.id()).status());
+        assertEquals("SOLD", productService.listMine(seller.id()).get(0).status());
+        assertEquals(4, orderService.findDetail(order.id(), buyer.id()).events().size());
     }
 
     private UserResponse user(String nickname) {

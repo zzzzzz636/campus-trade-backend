@@ -1,26 +1,52 @@
 package com.campus.campus_trade_backend.order.service;
 
+import com.campus.campus_trade_backend.order.dto.CreateOrderRequest;
+import com.campus.campus_trade_backend.order.dto.FulfillmentType;
+import com.campus.campus_trade_backend.order.dto.OrderDetailResponse;
+import com.campus.campus_trade_backend.order.dto.OrderEventResponse;
 import com.campus.campus_trade_backend.order.dto.OrderResponse;
+import com.campus.campus_trade_backend.order.dto.ShipOrderRequest;
 import com.campus.campus_trade_backend.order.entity.OrderEntity;
+import com.campus.campus_trade_backend.order.entity.OrderEventEntity;
+import com.campus.campus_trade_backend.order.mapper.NotificationMapper;
+import com.campus.campus_trade_backend.order.mapper.OrderEventMapper;
 import com.campus.campus_trade_backend.order.mapper.OrderMapper;
 import com.campus.campus_trade_backend.product.entity.ProductEntity;
 import com.campus.campus_trade_backend.product.mapper.ProductMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class OrderService {
+    private static final Logger log = LoggerFactory.getLogger(OrderService.class);
+    private static final String PENDING = "PENDING_SELLER_CONFIRMATION";
+    private static final Set<String> SELLER_MAY_VIEW_SHIPPING =
+            Set.of("WAITING_SHIPMENT", "SHIPPED", "COMPLETED");
+
     private final ProductMapper productMapper;
     private final OrderMapper orderMapper;
+    private final OrderEventMapper orderEventMapper;
+    private final NotificationMapper notificationMapper;
 
-    public OrderService(ProductMapper productMapper, OrderMapper orderMapper) {
+    @Value("${campus.order.confirmation-hours:24}")
+    private long confirmationHours;
+
+    public OrderService(ProductMapper productMapper, OrderMapper orderMapper,
+                        OrderEventMapper orderEventMapper, NotificationMapper notificationMapper) {
         this.productMapper = productMapper;
         this.orderMapper = orderMapper;
+        this.orderEventMapper = orderEventMapper;
+        this.notificationMapper = notificationMapper;
     }
 
     @Transactional
@@ -30,82 +56,166 @@ public class OrderService {
 
     @Transactional
     public OrderResponse create(long productId, long buyerId, String requestKey) {
-        // 锁定商品行，避免卖家编辑与买家下单交错后，订单保存了过期标题或价格。
-        ProductEntity product = productMapper.findAnyByIdForUpdate(productId);
-        if (product == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "商品不存在");
-        }
+        return create(new CreateOrderRequest(productId, requestKey, FulfillmentType.CAMPUS_HANDOFF,
+                null, null, null, null, null), buyerId);
+    }
+
+    @Transactional
+    public OrderResponse create(CreateOrderRequest request, long buyerId) {
+        String requestKey = trimToNull(request.requestKey());
+        OrderEntity previous = findIdempotentOrder(buyerId, request.productId(), requestKey);
+        if (previous != null) return toResponse(orderMapper.findById(previous.getId()));
+
+        // 商品行锁把“检查在售、写订单快照、预订商品”串成一个原子业务单元。
+        ProductEntity product = productMapper.findAnyByIdForUpdate(request.productId());
+        if (product == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "商品不存在");
         if (product.getSellerId().equals(buyerId)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不能购买自己的商品");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不能申请购买自己的商品");
         }
+        previous = findIdempotentOrder(buyerId, request.productId(), requestKey);
+        if (previous != null) return toResponse(orderMapper.findById(previous.getId()));
         if (!"ON_SALE".equals(product.getStatus()) ||
-                productMapper.reserveForOrder(productId, buyerId) != 1) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "商品已被选购或下架");
+                productMapper.reserveForOrder(product.getId(), buyerId) != 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "商品已有待处理申请或已下架");
         }
 
+        FulfillmentType fulfillment = request.fulfillmentType() == null
+                ? FulfillmentType.CAMPUS_HANDOFF : request.fulfillmentType();
+        validateFulfillment(request, fulfillment);
         OrderEntity order = new OrderEntity();
-        order.setProductId(productId);
+        order.setProductId(product.getId());
         order.setProductTitle(product.getTitle());
+        order.setProductDescription(product.getDescription());
         order.setBuyerId(buyerId);
         order.setSellerId(product.getSellerId());
         order.setPrice(product.getPrice());
-        order.setStatus("PENDING_MEETUP");
+        order.setStatus(PENDING);
+        order.setFulfillmentType(fulfillment.name());
+        order.setBuyerNote(trimToNull(request.buyerNote()));
+        order.setHandoffLocation(fulfillment == FulfillmentType.CAMPUS_HANDOFF
+                ? trimToNull(request.handoffLocation()) : null);
+        order.setRecipientName(fulfillment == FulfillmentType.SHIPPING
+                ? request.recipientName().trim() : null);
+        order.setRecipientPhone(fulfillment == FulfillmentType.SHIPPING
+                ? request.recipientPhone().trim() : null);
+        order.setShippingAddress(fulfillment == FulfillmentType.SHIPPING
+                ? request.shippingAddress().trim() : null);
         order.setRequestKey(requestKey);
+        order.setExpiresAt(LocalDateTime.now().plusHours(confirmationHours));
         try {
-            // 唯一请求键冲突会抛异常，使前面的商品预订更新在同一事务中回滚。
             orderMapper.insert(order);
-        } catch (DuplicateKeyException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "该下单请求已处理，请勿重复提交", e);
+        } catch (DuplicateKeyException duplicate) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "该申请请求键已被其他订单使用", duplicate);
         }
-        return toResponse(order);
+        record(order.getId(), buyerId, "BUYER_APPLIED", null, PENDING, null);
+        notifyUser(order.getSellerId(), "ORDER_APPLICATION", order.getId(),
+                "收到新的购买申请：" + product.getTitle());
+        log.info("订单状态转换 orderId={} actorId={} from={} to={}", order.getId(), buyerId, null, PENDING);
+        return toResponse(requireOrder(order.getId()));
+    }
+
+    @Transactional
+    public OrderResponse accept(long orderId, long sellerId, String note) {
+        OrderEntity order = requireLockedOrder(orderId);
+        requireSeller(order, sellerId);
+        if (!PENDING.equals(order.getStatus())) conflict("订单已经处理，不能重复接受");
+        String target = FulfillmentType.SHIPPING.name().equals(order.getFulfillmentType())
+                ? "WAITING_SHIPMENT" : "WAITING_HANDOFF";
+        if (orderMapper.acceptPending(orderId, sellerId, target, trimToNull(note)) != 1) {
+            conflict("订单状态已变化，请刷新后重试");
+        }
+        record(orderId, sellerId, "SELLER_ACCEPTED", PENDING, target, trimToNull(note));
+        notifyUser(order.getBuyerId(), "ORDER_ACCEPTED", orderId, "卖家已接受你的购买申请");
+        log.info("订单状态转换 orderId={} actorId={} from={} to={}", orderId, sellerId, PENDING, target);
+        return toResponse(requireOrder(orderId));
+    }
+
+    @Transactional
+    public OrderResponse reject(long orderId, long sellerId, String note) {
+        OrderEntity order = requireLockedOrder(orderId);
+        requireSeller(order, sellerId);
+        if (!PENDING.equals(order.getStatus()) ||
+                orderMapper.rejectPending(orderId, sellerId, trimToNull(note)) != 1) {
+            conflict("订单当前状态不能拒绝");
+        }
+        releaseProduct(order, "拒绝申请");
+        record(orderId, sellerId, "SELLER_REJECTED", PENDING, "REJECTED", trimToNull(note));
+        notifyUser(order.getBuyerId(), "ORDER_REJECTED", orderId, "卖家未接受你的购买申请");
+        log.info("订单状态转换 orderId={} actorId={} from={} to=REJECTED", orderId, sellerId, PENDING);
+        return toResponse(requireOrder(orderId));
     }
 
     @Transactional
     public OrderResponse cancel(long orderId, long buyerId) {
-        OrderEntity order = requireBuyerOrder(orderId, buyerId);
-        if (!"PENDING_MEETUP".equals(order.getStatus()) || orderMapper.cancelPending(orderId, buyerId) != 1) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "订单当前状态不能取消");
+        OrderEntity order = requireLockedOrder(orderId);
+        requireBuyer(order, buyerId);
+        if (!PENDING.equals(order.getStatus()) || orderMapper.cancelPending(orderId, buyerId) != 1) {
+            conflict("卖家接受后不能直接取消，请先联系卖家协商");
         }
-        // 订单和商品状态必须一起成功；异常让 Spring 回滚整个事务。
-        if (productMapper.releaseAfterCancellation(order.getProductId()) != 1) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "商品状态异常，取消订单已回滚");
+        releaseProduct(order, "取消申请");
+        record(orderId, buyerId, "BUYER_CANCELLED", PENDING, "CANCELLED", null);
+        notifyUser(order.getSellerId(), "ORDER_CANCELLED", orderId, "买家已取消购买申请");
+        log.info("订单状态转换 orderId={} actorId={} from={} to=CANCELLED", orderId, buyerId, PENDING);
+        return toResponse(requireOrder(orderId));
+    }
+
+    @Transactional
+    public OrderResponse ship(long orderId, long sellerId, ShipOrderRequest request) {
+        OrderEntity order = requireLockedOrder(orderId);
+        requireSeller(order, sellerId);
+        if (!"WAITING_SHIPMENT".equals(order.getStatus()) ||
+                orderMapper.markShipped(orderId, sellerId, request.carrier().trim(), request.trackingNumber().trim()) != 1) {
+            conflict("只有等待发货的快递订单可以确认发货");
         }
-        order.setStatus("CANCELLED");
-        return toResponse(order);
+        record(orderId, sellerId, "SELLER_SHIPPED", "WAITING_SHIPMENT", "SHIPPED", "卖家已填写物流信息");
+        notifyUser(order.getBuyerId(), "ORDER_SHIPPED", orderId, "卖家已发货，请在收到商品后确认收货");
+        log.info("订单状态转换 orderId={} actorId={} from=WAITING_SHIPMENT to=SHIPPED", orderId, sellerId);
+        return toResponse(requireOrder(orderId));
     }
 
     @Transactional
     public OrderResponse complete(long orderId, long buyerId) {
-        OrderEntity order = requireBuyerOrder(orderId, buyerId);
-        if (!"PENDING_MEETUP".equals(order.getStatus()) || orderMapper.completePending(orderId, buyerId) != 1) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "订单当前状态不能确认成交");
+        OrderEntity order = requireLockedOrder(orderId);
+        requireBuyer(order, buyerId);
+        String from = order.getStatus();
+        if (!("WAITING_HANDOFF".equals(from) || "SHIPPED".equals(from)) ||
+                orderMapper.completeFulfillment(orderId, buyerId) != 1) {
+            conflict("订单尚未达到可确认收货的状态");
         }
         if (productMapper.markSold(order.getProductId()) != 1) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "商品状态异常，确认成交已回滚");
+            conflict("商品状态异常，确认收货已回滚");
         }
-        order.setStatus("COMPLETED");
-        return toResponse(order);
+        record(orderId, buyerId, "BUYER_COMPLETED", from, "COMPLETED", null);
+        notifyUser(order.getSellerId(), "ORDER_COMPLETED", orderId, "买家已确认收货，交易完成");
+        log.info("订单状态转换 orderId={} actorId={} from={} to=COMPLETED", orderId, buyerId, from);
+        return toResponse(requireOrder(orderId));
     }
 
-    private OrderEntity requireBuyerOrder(long orderId, long buyerId) {
-        OrderEntity order = orderMapper.findById(orderId);
-        if (order == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "订单不存在");
-        }
-        if (!order.getBuyerId().equals(buyerId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只能操作自己的购买订单");
-        }
-        return order;
+    public OrderDetailResponse findDetail(long orderId, long userId) {
+        OrderEntity order = requireOrder(orderId);
+        requireParticipant(order, userId);
+        boolean buyer = order.getBuyerId().equals(userId);
+        boolean revealShipping = buyer || SELLER_MAY_VIEW_SHIPPING.contains(order.getStatus());
+        List<OrderEventResponse> events = orderEventMapper.listByOrder(orderId).stream()
+                .map(event -> new OrderEventResponse(event.getId(), event.getActorId(), event.getEventType(),
+                        event.getFromStatus(), event.getToStatus(), event.getNote(), event.getCreatedAt()))
+                .toList();
+        return new OrderDetailResponse(order.getId(), order.getProductId(), order.getProductTitle(),
+                order.getProductDescription(), imageUrl(order.getProductCoverImageId()), order.getPrice(),
+                order.getStatus(), order.getFulfillmentType(), order.getBuyerId(), order.getBuyerNickname(),
+                order.getSellerId(), order.getSellerNickname(), buyer ? "BUYER" : "SELLER",
+                order.getBuyerNote(), order.getHandoffLocation(),
+                revealShipping ? order.getRecipientName() : null,
+                revealShipping ? order.getRecipientPhone() : null,
+                revealShipping ? order.getShippingAddress() : null,
+                order.getShippingCarrier(), order.getTrackingNumber(), order.getSellerDecisionNote(),
+                order.getExpiresAt(), order.getAcceptedAt(), order.getRejectedAt(), order.getShippedAt(),
+                order.getCompletedAt(), order.getCancelledAt(), order.getCreatedAt(), order.getUpdatedAt(), events);
     }
 
     public OrderResponse findById(long orderId, long userId) {
-        OrderEntity order = orderMapper.findById(orderId);
-        if (order == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "订单不存在");
-        }
-        if (!order.getBuyerId().equals(userId) && !order.getSellerId().equals(userId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "无权查看此订单");
-        }
+        OrderEntity order = requireOrder(orderId);
+        requireParticipant(order, userId);
         return toResponse(order);
     }
 
@@ -121,8 +231,112 @@ public class OrderService {
         return orderMapper.listForSeller(sellerId).stream().map(OrderService::toResponse).toList();
     }
 
+    @Transactional
+    public int expirePendingOrders(int limit) {
+        LocalDateTime now = LocalDateTime.now();
+        int expired = 0;
+        for (Long orderId : orderMapper.findExpiredPendingIds(now, limit)) {
+            OrderEntity order = requireLockedOrder(orderId);
+            if (!PENDING.equals(order.getStatus()) || orderMapper.expirePending(orderId, now) != 1) continue;
+            releaseProduct(order, "申请超时");
+            record(orderId, null, "APPLICATION_EXPIRED", PENDING, "EXPIRED", null);
+            notifyUser(order.getBuyerId(), "ORDER_EXPIRED", orderId, "购买申请已超时失效");
+            notifyUser(order.getSellerId(), "ORDER_EXPIRED", orderId, "未处理的购买申请已超时释放商品");
+            expired++;
+        }
+        if (expired > 0) log.info("订单超时任务完成 expiredCount={}", expired);
+        return expired;
+    }
+
+    private OrderEntity findIdempotentOrder(long buyerId, long productId, String requestKey) {
+        if (requestKey == null) return null;
+        OrderEntity existing = orderMapper.findByBuyerAndRequestKey(buyerId, requestKey);
+        if (existing != null && !existing.getProductId().equals(productId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "请求键已用于其他商品");
+        }
+        return existing;
+    }
+
+    private void validateFulfillment(CreateOrderRequest request, FulfillmentType fulfillment) {
+        if (fulfillment == FulfillmentType.SHIPPING &&
+                (isBlank(request.recipientName()) || isBlank(request.recipientPhone()) || isBlank(request.shippingAddress()))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "快递订单必须填写收件人、联系电话和收货地址");
+        }
+    }
+
+    private void releaseProduct(OrderEntity order, String operation) {
+        if (productMapper.releaseAfterCancellation(order.getProductId()) != 1) {
+            conflict("商品状态异常，" + operation + "已回滚");
+        }
+    }
+
+    private OrderEntity requireOrder(long orderId) {
+        OrderEntity order = orderMapper.findById(orderId);
+        if (order == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "订单不存在");
+        return order;
+    }
+
+    private OrderEntity requireLockedOrder(long orderId) {
+        OrderEntity order = orderMapper.findByIdForUpdate(orderId);
+        if (order == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "订单不存在");
+        return order;
+    }
+
+    private static void requireBuyer(OrderEntity order, long userId) {
+        if (!order.getBuyerId().equals(userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只有订单买家可以执行此操作");
+        }
+    }
+
+    private static void requireSeller(OrderEntity order, long userId) {
+        if (!order.getSellerId().equals(userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只有商品卖家可以处理此申请");
+        }
+    }
+
+    private static void requireParticipant(OrderEntity order, long userId) {
+        if (!order.getBuyerId().equals(userId) && !order.getSellerId().equals(userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "无权查看此订单");
+        }
+    }
+
+    private void record(long orderId, Long actorId, String type, String from, String to, String note) {
+        OrderEventEntity event = new OrderEventEntity();
+        event.setOrderId(orderId);
+        event.setActorId(actorId);
+        event.setEventType(type);
+        event.setFromStatus(from);
+        event.setToStatus(to);
+        event.setNote(note);
+        orderEventMapper.insert(event);
+    }
+
+    private void notifyUser(long userId, String type, long orderId, String title) {
+        notificationMapper.insert(userId, type, orderId, title);
+    }
+
     private static OrderResponse toResponse(OrderEntity order) {
-        return new OrderResponse(order.getId(), order.getProductId(), order.getProductTitle(), order.getBuyerId(),
-                order.getSellerId(), order.getPrice(), order.getStatus());
+        return new OrderResponse(order.getId(), order.getProductId(), order.getProductTitle(),
+                imageUrl(order.getProductCoverImageId()), order.getBuyerId(), order.getBuyerNickname(),
+                order.getSellerId(), order.getSellerNickname(), order.getPrice(), order.getStatus(),
+                order.getFulfillmentType(), order.getCreatedAt(), order.getUpdatedAt());
+    }
+
+    private static String imageUrl(Long imageId) {
+        return imageId == null ? null : "/api/product-images/" + imageId + "/content";
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private static void conflict(String message) {
+        throw new ResponseStatusException(HttpStatus.CONFLICT, message);
     }
 }

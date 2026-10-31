@@ -60,12 +60,15 @@ class MySqlOrderConcurrencyIntegrationTests {
 
     @Test
     void flywayCreatesCurrentSchemaAndRequiredIndexes() {
-        assertEquals(2L, jdbc.queryForObject(
+        assertEquals(3L, jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1", Long.class));
         assertEquals(5L, jdbc.queryForObject("SELECT COUNT(*) FROM category", Long.class));
         assertTrue(indexExists("product", "idx_product_status_created_id"));
         assertTrue(indexExists("trade_order", "uq_order_buyer_request"));
         assertTrue(indexExists("product_image", "idx_product_image_product"));
+        assertTrue(indexExists("trade_order", "idx_order_status_expires"));
+        assertTrue(indexExists("private_message", "idx_message_conversation_id"));
+        assertTrue(indexExists("product_favorite", "idx_favorite_user_created"));
     }
 
     @Test
@@ -100,7 +103,7 @@ class MySqlOrderConcurrencyIntegrationTests {
             for (Future<Boolean> future : futures) if (future.get(30, TimeUnit.SECONDS)) successes++;
             assertEquals(1, successes);
             assertEquals(1L, jdbc.queryForObject(
-                    "SELECT COUNT(*) FROM trade_order WHERE product_id = ? AND status = 'PENDING_MEETUP'",
+                    "SELECT COUNT(*) FROM trade_order WHERE product_id = ? AND status = 'PENDING_SELLER_CONFIRMATION'",
                     Long.class, productId));
             assertEquals("RESERVED", jdbc.queryForObject(
                     "SELECT status FROM product WHERE id = ?", String.class, productId));
