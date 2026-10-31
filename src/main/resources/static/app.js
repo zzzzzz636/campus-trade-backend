@@ -4,6 +4,7 @@ import { bindAuthEvents, configureAuth, logout, restoreSession } from './js/auth
 import { bindProfileEvents, configureProfile, loadProfile, profileTab } from './js/profile.js';
 import { bindOrderEvents, closeOrderDetail, configureOrders, openPurchaseDialog } from './js/orders-v5.js';
 import { bindMessagingEvents, closeChat, configureMessaging, openConversation } from './js/messaging.js';
+import { configureFavorites, favoriteButton, loadFavoriteIds } from './js/favorites.js';
 
 function navigate(view) {
   state.view = view;
@@ -95,15 +96,19 @@ function renderProducts(items) {
     host.append(empty);
   } else {
     for (const [index, item] of items.entries()) {
-      const card = el('button', '', 'product-card');
-      card.type = 'button';
+      const card = el('article', '', 'product-card');
+      card.tabIndex = 0;
+      card.setAttribute('role', 'button');
       const body = el('div', '', 'product-body');
       body.append(el('span', displayCategory(item), 'tag'), el('h3', item.title), el('div', money(item.price), 'price'));
       const meta = el('div', '', 'product-meta');
       meta.append(el('span', `发布者 · ${item.sellerNickname || '校园同学'}`), el('span', conditionName[item.condition] || item.condition));
       body.append(meta, el('time', item.createdAt ? `发布于 ${dateTime(item.createdAt)}` : '', 'product-time'));
-      card.append(cover(item, index), body);
+      const cardCover = cover(item, index);
+      cardCover.append(favoriteButton(item.id, true));
+      card.append(cardCover, body);
       card.addEventListener('click', () => openDetail(item.id));
+      card.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') openDetail(item.id); });
       host.append(card);
     }
   }
@@ -121,7 +126,7 @@ async function loadProducts() {
   if (state.categoryId) params.set('categoryId', state.categoryId);
   if (state.minPrice) params.set('minPrice', state.minPrice);
   if (state.maxPrice) params.set('maxPrice', state.maxPrice);
-  const result = await api(`/api/products?${params}`);
+  const [result] = await Promise.all([api(`/api/products?${params}`), loadFavoriteIds()]);
   if (id !== state.loadId) return;
   if (result.total > 0 && result.items.length === 0 && state.page > 1) {
     state.page = Math.ceil(result.total / 12);
@@ -218,6 +223,7 @@ async function openDetail(id) {
     $('detail-condition').textContent = `商品成色：${conditionName[product.condition] || product.condition}`;
     const actions = $('detail-actions');
     actions.replaceChildren();
+    if (!own) actions.append(favoriteButton(product.id));
     if (product.status === 'ON_SALE') {
       if (own) {
         if (managingFromProfile) {
@@ -508,6 +514,7 @@ configureOrders({
   openConversation
 });
 configureMessaging({ afterChange: async () => { if (state.view === 'profile') await loadProfile(); } });
+configureFavorites({ openDetail, refreshProducts: loadProducts });
 bindAuthEvents();
 bindProfileEvents();
 bindOrderEvents();
