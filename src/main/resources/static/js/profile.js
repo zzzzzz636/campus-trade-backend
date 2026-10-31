@@ -1,6 +1,7 @@
 import { $, conditionName, dateTime, el, money, statusName, toast } from './core.js';
 import { api } from './api.js';
 import { emptyProfile, renderPurchases, renderSales, statusStyle } from './orders-v5.js';
+import { loadConversations } from './messaging.js';
 
 let hooks = {
   navigate: () => { }, openDetail: async () => { }, startEdit: () => { },
@@ -14,7 +15,7 @@ export function configureProfile(options) {
 
 export async function loadProfile() {
   const [purchases, sales, products] = await Promise.all([
-    api('/api/orders/purchases'), api('/api/orders/sales'), api('/api/products/me')
+    api('/api/orders/purchases'), api('/api/orders/sales'), api('/api/products/me'), loadConversations()
   ]);
   renderPurchases(purchases);
   renderSales(sales);
@@ -22,7 +23,7 @@ export async function loadProfile() {
 }
 
 export function profileTab(name) {
-  for (const tab of ['purchases', 'sales', 'listings']) {
+  for (const tab of ['purchases', 'sales', 'listings', 'messages']) {
     $(`${tab}-pane`).hidden = tab !== name;
     $(`tab-${tab}`).classList.toggle('active', tab === name);
   }
@@ -33,6 +34,7 @@ export function bindProfileEvents() {
   $('tab-purchases').addEventListener('click', () => profileTab('purchases'));
   $('tab-sales').addEventListener('click', () => profileTab('sales'));
   $('tab-listings').addEventListener('click', () => profileTab('listings'));
+  $('tab-messages').addEventListener('click', () => profileTab('messages'));
 }
 
 function renderListings(products) {

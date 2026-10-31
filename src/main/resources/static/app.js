@@ -3,6 +3,7 @@ import { api, configureApi } from './js/api.js';
 import { bindAuthEvents, configureAuth, logout, restoreSession } from './js/auth.js';
 import { bindProfileEvents, configureProfile, loadProfile, profileTab } from './js/profile.js';
 import { bindOrderEvents, closeOrderDetail, configureOrders, openPurchaseDialog } from './js/orders-v5.js';
+import { bindMessagingEvents, closeChat, configureMessaging, openConversation } from './js/messaging.js';
 
 function navigate(view) {
   state.view = view;
@@ -12,6 +13,7 @@ function navigate(view) {
   $('nav-profile').classList.toggle('active', view === 'profile');
   closeDetail();
   closeOrderDetail();
+  closeChat();
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (view === 'profile') loadProfile().catch(error => toast(`加载个人中心失败：${error.message}`, true));
 }
@@ -242,13 +244,21 @@ async function openDetail(id) {
           actions.append(tip, manageButton);
         }
       } else {
+        const contact = el('button', '联系卖家', 'outline-btn');
+        contact.type = 'button';
+        contact.addEventListener('click', async () => {
+          contact.disabled = true;
+          try { await openConversation('PRODUCT', product.id); }
+          catch (error) { toast(`无法打开私信：${error.message}`, true); }
+          finally { contact.disabled = false; }
+        });
         const button = el('button', '提交购买申请', 'primary');
         button.type = 'button';
         button.addEventListener('click', () => {
           closeDetail();
           openPurchaseDialog(product);
         });
-        actions.append(button);
+        actions.append(contact, button);
       }
     }
     $('detail-overlay').hidden = false;
@@ -495,9 +505,11 @@ configureOrders({
     await loadProducts();
     if (state.view === 'profile') await loadProfile();
   },
-  openConversation: async () => toast('私信入口将在下一阶段接通，请稍候。')
+  openConversation
 });
+configureMessaging({ afterChange: async () => { if (state.view === 'profile') await loadProfile(); } });
 bindAuthEvents();
 bindProfileEvents();
 bindOrderEvents();
+bindMessagingEvents();
 restoreSession();
