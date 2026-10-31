@@ -1,6 +1,6 @@
 import { $, conditionName, dateTime, el, money, statusName, toast } from './core.js';
 import { api } from './api.js';
-import { emptyProfile, renderPurchases, renderSales, statusStyle } from './orders.js';
+import { emptyProfile, renderPurchases, renderSales, statusStyle } from './orders-v5.js';
 
 let hooks = {
   navigate: () => { }, openDetail: async () => { }, startEdit: () => { },
@@ -16,9 +16,8 @@ export async function loadProfile() {
   const [purchases, sales, products] = await Promise.all([
     api('/api/orders/purchases'), api('/api/orders/sales'), api('/api/products/me')
   ]);
-  const refresh = () => Promise.all([loadProfile(), hooks.loadProducts()]);
-  renderPurchases(purchases, refresh);
-  renderSales(sales, refresh);
+  renderPurchases(purchases);
+  renderSales(sales);
   renderListings(products);
 }
 

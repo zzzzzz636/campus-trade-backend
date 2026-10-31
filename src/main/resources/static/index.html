@@ -112,7 +112,7 @@
       <div id="listings-pane" class="profile-list" hidden></div>
     </section>
 
-    <footer class="site-footer">CampusTrade · 让校园闲置流转起来 <span>V4 多用户交易闭环 · 线下面交</span></footer>
+    <footer class="site-footer">CampusTrade · 让校园闲置流转起来 <span>V5 购买申请 · 面交与快递履约</span></footer>
   </div>
 
   <div id="detail-overlay" class="overlay" hidden>
@@ -122,6 +122,31 @@
       <div id="detail-cover" class="detail-cover" aria-hidden="true">🛍️</div>
       <div id="detail-images" class="detail-images"></div>
       <div class="detail-content"><span id="detail-category" class="tag"></span><h2 id="detail-title"></h2><p id="detail-seller" class="subtle"></p><p id="detail-published" class="subtle"></p><strong id="detail-price" class="detail-price"></strong><div class="detail-divider"></div><h3>商品说明</h3><p id="detail-description" class="detail-description"></p><p id="detail-condition" class="subtle"></p><div id="detail-actions" class="detail-actions"></div></div>
+    </section>
+  </div>
+
+  <dialog id="purchase-dialog" class="modal-card">
+    <form id="purchase-form" class="stack-form">
+      <div class="modal-heading"><div><span class="eyebrow">PURCHASE REQUEST</span><h2>提交购买申请</h2></div><button id="close-purchase" class="modal-close" type="button" aria-label="关闭">×</button></div>
+      <p id="purchase-product" class="subtle"></p>
+      <label>交易方式<select id="purchase-fulfillment" name="fulfillmentType"><option value="CAMPUS_HANDOFF">校园面交</option><option value="SHIPPING">快递邮寄</option></select></label>
+      <label id="handoff-field">期望面交地点<input name="handoffLocation" maxlength="200" placeholder="例如：东区食堂门口"></label>
+      <div id="shipping-fields" class="stack-form nested-fields" hidden>
+        <label>收件人<input name="recipientName" maxlength="80" autocomplete="name"></label>
+        <label>联系电话<input name="recipientPhone" maxlength="30" autocomplete="tel"></label>
+        <label>收货地址<textarea name="shippingAddress" maxlength="500" autocomplete="street-address"></textarea></label>
+      </div>
+      <label>给卖家的备注<textarea name="buyerNote" maxlength="500" placeholder="可说明期望时间或物品问题"></textarea></label>
+      <p class="privacy-tip">订单申请不代表付款。快递收货信息仅在卖家接受申请后向卖家展示。</p>
+      <button class="primary" type="submit">提交申请</button>
+    </form>
+  </dialog>
+
+  <div id="order-overlay" class="overlay" hidden>
+    <div id="order-backdrop" class="overlay-backdrop"></div>
+    <section class="detail-drawer order-drawer" role="dialog" aria-modal="true" aria-labelledby="order-detail-title">
+      <button id="close-order-detail" class="close-button" type="button" aria-label="关闭订单详情">×</button>
+      <div id="order-detail-content" class="order-detail-content"></div>
     </section>
   </div>
 </body>

@@ -9,7 +9,9 @@ export const money = value => `¥${Number(value).toFixed(2)}`;
 export const conditionName = { NEW: '全新', LIKE_NEW: '近新', GOOD: '良好', FAIR: '可用' };
 export const statusName = {
   ON_SALE: '在售', RESERVED: '已预订', SOLD: '已售出', OFF_SHELF: '已下架',
-  PENDING_MEETUP: '待线下面交', COMPLETED: '已完成', CANCELLED: '已取消'
+  PENDING_SELLER_CONFIRMATION: '等待卖家确认', WAITING_HANDOFF: '等待面交',
+  WAITING_SHIPMENT: '等待卖家发货', SHIPPED: '已发货', COMPLETED: '已完成',
+  REJECTED: '卖家已拒绝', CANCELLED: '已取消', EXPIRED: '申请已超时'
 };
 export const dateTime = value => value
   ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))

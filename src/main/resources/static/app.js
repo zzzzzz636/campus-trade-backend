@@ -2,6 +2,7 @@ import { $, conditionName, dateTime, el, money, state, toast } from './js/core.j
 import { api, configureApi } from './js/api.js';
 import { bindAuthEvents, configureAuth, logout, restoreSession } from './js/auth.js';
 import { bindProfileEvents, configureProfile, loadProfile, profileTab } from './js/profile.js';
+import { bindOrderEvents, closeOrderDetail, configureOrders, openPurchaseDialog } from './js/orders-v5.js';
 
 function navigate(view) {
   state.view = view;
@@ -10,6 +11,7 @@ function navigate(view) {
   $('nav-publish').classList.toggle('active', view === 'publish');
   $('nav-profile').classList.toggle('active', view === 'profile');
   closeDetail();
+  closeOrderDetail();
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (view === 'profile') loadProfile().catch(error => toast(`加载个人中心失败：${error.message}`, true));
 }
@@ -240,18 +242,11 @@ async function openDetail(id) {
           actions.append(tip, manageButton);
         }
       } else {
-        const button = el('button', '选择商品，创建线下面交订单', 'primary');
+        const button = el('button', '提交购买申请', 'primary');
         button.type = 'button';
-        const requestKey = crypto.randomUUID();
-        button.addEventListener('click', async () => {
-          button.disabled = true;
-          try {
-            const order = await api('/api/orders', { method: 'POST', body: JSON.stringify({ productId: product.id, requestKey }) });
-            closeDetail();
-            await loadProducts();
-            toast(`订单 #${order.id} 已创建，可在个人中心查看。`);
-          } catch (error) { toast(`操作失败：${error.message}`, true); }
-          finally { button.disabled = false; }
+        button.addEventListener('click', () => {
+          closeDetail();
+          openPurchaseDialog(product);
         });
         actions.append(button);
       }
@@ -495,6 +490,14 @@ configureAuth({
   }
 });
 configureProfile({ navigate, openDetail, startEdit, takeDown, loadProducts, iconFor, displayCategory });
+configureOrders({
+  refresh: async () => {
+    await loadProducts();
+    if (state.view === 'profile') await loadProfile();
+  },
+  openConversation: async () => toast('私信入口将在下一阶段接通，请稍候。')
+});
 bindAuthEvents();
 bindProfileEvents();
+bindOrderEvents();
 restoreSession();
