@@ -53,10 +53,28 @@ CREATE TABLE trade_order (
     product_id BIGINT NOT NULL,
     buyer_id BIGINT NOT NULL,
     seller_id BIGINT NOT NULL,
+    product_title_snapshot VARCHAR(120) NOT NULL,
+    product_description_snapshot TEXT NOT NULL,
     price DECIMAL(10, 2) NOT NULL,
     status VARCHAR(30) NOT NULL,
+    fulfillment_type VARCHAR(30) NOT NULL,
+    buyer_note VARCHAR(500),
+    handoff_location VARCHAR(200),
+    recipient_name VARCHAR(80),
+    recipient_phone VARCHAR(30),
+    shipping_address VARCHAR(500),
+    shipping_carrier VARCHAR(80),
+    tracking_number VARCHAR(100),
+    seller_decision_note VARCHAR(300),
     request_key VARCHAR(64),
+    expires_at TIMESTAMP,
+    accepted_at TIMESTAMP,
+    rejected_at TIMESTAMP,
+    shipped_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    cancelled_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_order_product FOREIGN KEY (product_id) REFERENCES product(id),
     CONSTRAINT fk_order_buyer FOREIGN KEY (buyer_id) REFERENCES app_user(id),
     CONSTRAINT fk_order_seller FOREIGN KEY (seller_id) REFERENCES app_user(id)
@@ -64,4 +82,75 @@ CREATE TABLE trade_order (
 
 CREATE INDEX idx_order_buyer_created ON trade_order (buyer_id, created_at, id);
 CREATE INDEX idx_order_seller_created ON trade_order (seller_id, created_at, id);
+CREATE INDEX idx_order_status_expires ON trade_order (status, expires_at, id);
 CREATE UNIQUE INDEX uq_order_buyer_request ON trade_order (buyer_id, request_key);
+
+CREATE TABLE order_event (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    order_id BIGINT NOT NULL,
+    actor_id BIGINT,
+    event_type VARCHAR(40) NOT NULL,
+    from_status VARCHAR(30),
+    to_status VARCHAR(30) NOT NULL,
+    note VARCHAR(300),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_order_event_order FOREIGN KEY (order_id) REFERENCES trade_order(id),
+    CONSTRAINT fk_order_event_actor FOREIGN KEY (actor_id) REFERENCES app_user(id)
+);
+
+CREATE INDEX idx_order_event_order ON order_event (order_id, created_at, id);
+
+CREATE TABLE conversation (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    context_type VARCHAR(20) NOT NULL,
+    context_id BIGINT NOT NULL,
+    participant_low_id BIGINT NOT NULL,
+    participant_high_id BIGINT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_conversation_low FOREIGN KEY (participant_low_id) REFERENCES app_user(id),
+    CONSTRAINT fk_conversation_high FOREIGN KEY (participant_high_id) REFERENCES app_user(id),
+    CONSTRAINT uq_conversation_context UNIQUE (context_type, context_id, participant_low_id, participant_high_id)
+);
+
+CREATE INDEX idx_conversation_low_updated ON conversation (participant_low_id, updated_at, id);
+CREATE INDEX idx_conversation_high_updated ON conversation (participant_high_id, updated_at, id);
+
+CREATE TABLE private_message (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    conversation_id BIGINT NOT NULL,
+    sender_id BIGINT NOT NULL,
+    content VARCHAR(1000) NOT NULL,
+    sent_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    read_at TIMESTAMP,
+    CONSTRAINT fk_message_conversation FOREIGN KEY (conversation_id) REFERENCES conversation(id),
+    CONSTRAINT fk_message_sender FOREIGN KEY (sender_id) REFERENCES app_user(id)
+);
+
+CREATE INDEX idx_message_conversation_id ON private_message (conversation_id, id);
+CREATE INDEX idx_message_unread ON private_message (conversation_id, read_at, id);
+
+CREATE TABLE product_favorite (
+    user_id BIGINT NOT NULL,
+    product_id BIGINT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, product_id),
+    CONSTRAINT fk_favorite_user FOREIGN KEY (user_id) REFERENCES app_user(id),
+    CONSTRAINT fk_favorite_product FOREIGN KEY (product_id) REFERENCES product(id)
+);
+
+CREATE INDEX idx_favorite_product ON product_favorite (product_id, created_at);
+CREATE INDEX idx_favorite_user_created ON product_favorite (user_id, created_at, product_id);
+
+CREATE TABLE app_notification (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    type VARCHAR(40) NOT NULL,
+    reference_id BIGINT NOT NULL,
+    title VARCHAR(160) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    read_at TIMESTAMP,
+    CONSTRAINT fk_notification_user FOREIGN KEY (user_id) REFERENCES app_user(id)
+);
+
+CREATE INDEX idx_notification_user_read ON app_notification (user_id, read_at, created_at, id);
