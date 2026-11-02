@@ -8,6 +8,7 @@ import com.campus.campus_trade_backend.auth.verification.LocalConsoleMailSender;
 import com.campus.campus_trade_backend.auth.verification.VerificationService;
 import com.campus.campus_trade_backend.auth.security.JwtService;
 import com.campus.campus_trade_backend.order.service.OrderService;
+import com.campus.campus_trade_backend.order.mapper.OrderMapper;
 import com.campus.campus_trade_backend.order.dto.CreateOrderRequest;
 import com.campus.campus_trade_backend.order.dto.FulfillmentType;
 import com.campus.campus_trade_backend.order.dto.ShipOrderRequest;
@@ -26,6 +27,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -52,6 +54,7 @@ class OrderV2IntegrationTests {
     @Autowired LocalConsoleMailSender localMail;
     @Autowired ProductService productService;
     @Autowired OrderService orderService;
+    @Autowired OrderMapper orderMapper;
     @Autowired JdbcTemplate jdbc;
     @Autowired MockMvc mvc;
     @Autowired JwtService jwtService;
@@ -239,6 +242,49 @@ class OrderV2IntegrationTests {
         assertEquals("COMPLETED", orderService.complete(order.id(), buyer.id()).status());
         assertEquals("SOLD", productService.listMine(seller.id()).get(0).status());
         assertEquals(4, orderService.findDetail(order.id(), buyer.id()).events().size());
+    }
+
+    @Test
+    void acceptanceChecksDeadlineEvenBeforeExpiryJobRuns() {
+        UserResponse seller = user("超时卖家");
+        UserResponse buyer = user("超时买家");
+        long productId = product(seller.id());
+        var expired = orderService.create(productId, buyer.id(), key());
+        jdbc.update("UPDATE trade_order SET expires_at = ? WHERE id = ?",
+                LocalDateTime.now().minusSeconds(1), expired.id());
+        assertEquals(HttpStatus.CONFLICT, assertThrows(ResponseStatusException.class,
+                () -> orderService.accept(expired.id(), seller.id(), null)).getStatusCode());
+        assertEquals("PENDING_SELLER_CONFIRMATION", orderService.findById(expired.id(), buyer.id()).status());
+        assertEquals(1, orderService.expirePendingOrders(10));
+        assertEquals("EXPIRED", orderService.findById(expired.id(), buyer.id()).status());
+        assertEquals("ON_SALE", jdbc.queryForObject("SELECT status FROM product WHERE id = ?", String.class, productId));
+
+        var before = orderService.create(productId, buyer.id(), key());
+        jdbc.update("UPDATE trade_order SET expires_at = ? WHERE id = ?",
+                LocalDateTime.now().plusHours(1), before.id());
+        assertEquals("WAITING_HANDOFF", orderService.accept(before.id(), seller.id(), null).status());
+    }
+
+    @Test
+    void exactDeadlineIsExclusiveAndPagesFilterByStatus() {
+        UserResponse seller = user("分页卖家");
+        UserResponse buyer = user("分页买家");
+        long productId = product(seller.id());
+        var first = orderService.create(productId, buyer.id(), key());
+        LocalDateTime boundary = LocalDateTime.of(2030, 1, 1, 12, 0);
+        jdbc.update("UPDATE trade_order SET expires_at = ? WHERE id = ?", boundary, first.id());
+        assertEquals(0, orderMapper.acceptPending(first.id(), seller.id(), "WAITING_HANDOFF", null, boundary));
+        assertEquals(1, orderMapper.acceptPending(first.id(), seller.id(), "WAITING_HANDOFF", null,
+                boundary.minusSeconds(1)));
+        assertEquals("WAITING_HANDOFF", orderService.findById(first.id(), buyer.id()).status());
+
+        var purchases = orderService.listPurchases(buyer.id(), 1, 1, "WAITING_HANDOFF");
+        assertEquals(1, purchases.total());
+        assertEquals(first.id(), purchases.items().get(0).id());
+        assertEquals(1, orderService.listSales(seller.id(), 1, 1, "WAITING_HANDOFF").total());
+        assertEquals(0, orderService.listPurchases(buyer.id(), 2, 1, "WAITING_HANDOFF").items().size());
+        assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ResponseStatusException.class,
+                () -> orderService.listPurchases(buyer.id(), 1, 10, "WRONG")).getStatusCode());
     }
 
     private UserResponse user(String nickname) {

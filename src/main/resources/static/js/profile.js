@@ -9,6 +9,12 @@ let hooks = {
   takeDown: async () => { }, loadProducts: async () => { }, iconFor: () => '🛍️',
   displayCategory: () => '校园好物'
 };
+const orderPages = { purchases: 1, sales: 1 };
+const orderPageSize = 20;
+const orderStatuses = [
+  'PENDING_SELLER_CONFIRMATION', 'WAITING_HANDOFF', 'WAITING_SHIPMENT', 'SHIPPED',
+  'COMPLETED', 'CANCELLED', 'REJECTED', 'EXPIRED'
+];
 
 export function configureProfile(options) {
   hooks = { ...hooks, ...options };
@@ -16,21 +22,58 @@ export function configureProfile(options) {
 
 export async function loadProfile() {
   const [purchases, sales, products] = await Promise.all([
-    api('/api/orders/purchases'), api('/api/orders/sales'), api('/api/products/me'), loadConversations(), loadFavorites()
+    loadOrderPage('purchases'), loadOrderPage('sales'), api('/api/products/me'), loadConversations(), loadFavorites()
   ]);
-  renderPurchases(purchases);
-  renderSales(sales);
+  showOrderPage('purchases', purchases);
+  showOrderPage('sales', sales);
   renderListings(products);
+}
+
+async function loadOrderPage(kind) {
+  const params = new URLSearchParams({ page: orderPages[kind], size: orderPageSize });
+  const status = $(`${kind}-status`).value;
+  if (status) params.set('status', status);
+  return api(`/api/orders/${kind}/page?${params}`);
+}
+
+function showOrderPage(kind, result) {
+  if (kind === 'purchases') renderPurchases(result.items);
+  else renderSales(result.items);
+  $(`${kind === 'purchases' ? 'purchase' : 'sales'}-count`).textContent = result.total;
+  $(`${kind}-page-label`).textContent = `第 ${result.page} 页 · 共 ${result.total} 条`;
+  $(`${kind}-prev`).disabled = result.page <= 1;
+  $(`${kind}-next`).disabled = !result.hasMore;
+}
+
+async function changeOrderPage(kind, delta) {
+  orderPages[kind] = Math.max(1, orderPages[kind] + delta);
+  try { showOrderPage(kind, await loadOrderPage(kind)); }
+  catch (error) { orderPages[kind] = Math.max(1, orderPages[kind] - delta); toast(`订单加载失败：${error.message}`, true); }
 }
 
 export function profileTab(name) {
   for (const tab of ['purchases', 'sales', 'listings', 'messages', 'favorites']) {
     $(`${tab}-pane`).hidden = tab !== name;
+    if (tab === 'purchases' || tab === 'sales') $(`${tab}-pager`).hidden = tab !== name;
     $(`tab-${tab}`).classList.toggle('active', tab === name);
   }
 }
 
 export function bindProfileEvents() {
+  for (const kind of ['purchases', 'sales']) {
+    for (const status of orderStatuses) {
+      const option = el('option', statusName[status] || status);
+      option.value = status;
+      $(`${kind}-status`).append(option);
+    }
+    $(`${kind}-status`).addEventListener('change', async () => {
+      orderPages[kind] = 1;
+      try { showOrderPage(kind, await loadOrderPage(kind)); }
+      catch (error) { toast(`订单筛选失败：${error.message}`, true); }
+    });
+    $(`${kind}-prev`).addEventListener('click', () => changeOrderPage(kind, -1));
+    $(`${kind}-next`).addEventListener('click', () => changeOrderPage(kind, 1));
+  }
   $('nav-profile').addEventListener('click', () => hooks.navigate('profile'));
   $('tab-purchases').addEventListener('click', () => profileTab('purchases'));
   $('tab-sales').addEventListener('click', () => profileTab('sales'));

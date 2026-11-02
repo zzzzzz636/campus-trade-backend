@@ -5,6 +5,7 @@ import com.campus.campus_trade_backend.order.dto.FulfillmentType;
 import com.campus.campus_trade_backend.order.dto.OrderDetailResponse;
 import com.campus.campus_trade_backend.order.dto.OrderEventResponse;
 import com.campus.campus_trade_backend.order.dto.OrderResponse;
+import com.campus.campus_trade_backend.order.dto.OrdersPageResponse;
 import com.campus.campus_trade_backend.order.dto.ShipOrderRequest;
 import com.campus.campus_trade_backend.order.entity.OrderEntity;
 import com.campus.campus_trade_backend.order.entity.OrderEventEntity;
@@ -32,6 +33,9 @@ public class OrderService {
     private static final String PENDING = "PENDING_SELLER_CONFIRMATION";
     private static final Set<String> SELLER_MAY_VIEW_SHIPPING =
             Set.of("WAITING_SHIPMENT", "SHIPPED", "COMPLETED");
+    private static final Set<String> ORDER_STATUSES = Set.of("PENDING_SELLER_CONFIRMATION",
+            "WAITING_HANDOFF", "WAITING_SHIPMENT", "SHIPPED", "COMPLETED",
+            "CANCELLED", "REJECTED", "EXPIRED");
 
     private final ProductMapper productMapper;
     private final OrderMapper orderMapper;
@@ -119,9 +123,13 @@ public class OrderService {
         OrderEntity order = requireLockedOrder(orderId);
         requireSeller(order, sellerId);
         if (!PENDING.equals(order.getStatus())) conflict("订单已经处理，不能重复接受");
+        LocalDateTime now = LocalDateTime.now();
+        if (order.getExpiresAt() != null && !order.getExpiresAt().isAfter(now)) {
+            conflict("购买申请已到期，不能接受；等待超时任务释放商品");
+        }
         String target = FulfillmentType.SHIPPING.name().equals(order.getFulfillmentType())
                 ? "WAITING_SHIPMENT" : "WAITING_HANDOFF";
-        if (orderMapper.acceptPending(orderId, sellerId, target, trimToNull(note)) != 1) {
+        if (orderMapper.acceptPending(orderId, sellerId, target, trimToNull(note), now) != 1) {
             conflict("订单状态已变化，请刷新后重试");
         }
         record(orderId, sellerId, "SELLER_ACCEPTED", PENDING, target, trimToNull(note));
@@ -220,15 +228,39 @@ public class OrderService {
     }
 
     public List<OrderResponse> listMine(long userId) {
-        return orderMapper.listForUser(userId).stream().map(OrderService::toResponse).toList();
+        return orderMapper.listForUser(userId, 0, 50).stream().map(OrderService::toResponse).toList();
     }
 
     public List<OrderResponse> listPurchases(long buyerId) {
-        return orderMapper.listForBuyer(buyerId).stream().map(OrderService::toResponse).toList();
+        return listPurchases(buyerId, 1, 50, null).items();
     }
 
     public List<OrderResponse> listSales(long sellerId) {
-        return orderMapper.listForSeller(sellerId).stream().map(OrderService::toResponse).toList();
+        return listSales(sellerId, 1, 50, null).items();
+    }
+
+    public OrdersPageResponse listPurchases(long buyerId, int page, int size, String status) {
+        String filter = validatedStatus(status);
+        long total = orderMapper.countForBuyer(buyerId, filter);
+        List<OrderResponse> items = orderMapper.listForBuyer(buyerId, filter, (page - 1) * size, size)
+                .stream().map(OrderService::toResponse).toList();
+        return new OrdersPageResponse(items, total, page, size, (long) page * size < total);
+    }
+
+    public OrdersPageResponse listSales(long sellerId, int page, int size, String status) {
+        String filter = validatedStatus(status);
+        long total = orderMapper.countForSeller(sellerId, filter);
+        List<OrderResponse> items = orderMapper.listForSeller(sellerId, filter, (page - 1) * size, size)
+                .stream().map(OrderService::toResponse).toList();
+        return new OrdersPageResponse(items, total, page, size, (long) page * size < total);
+    }
+
+    private static String validatedStatus(String status) {
+        if (status == null || status.isBlank()) return null;
+        if (!ORDER_STATUSES.contains(status)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "未知订单状态");
+        }
+        return status;
     }
 
     @Transactional

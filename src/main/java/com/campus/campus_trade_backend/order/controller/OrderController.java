@@ -4,10 +4,12 @@ import com.campus.campus_trade_backend.order.dto.CreateOrderRequest;
 import com.campus.campus_trade_backend.order.dto.OrderDecisionRequest;
 import com.campus.campus_trade_backend.order.dto.OrderDetailResponse;
 import com.campus.campus_trade_backend.order.dto.OrderResponse;
+import com.campus.campus_trade_backend.order.dto.OrdersPageResponse;
 import com.campus.campus_trade_backend.order.dto.ShipOrderRequest;
 import com.campus.campus_trade_backend.order.service.OrderService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Max;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -49,6 +52,22 @@ public class OrderController {
     @GetMapping("/sales")
     public List<OrderResponse> sales(@AuthenticationPrincipal Jwt jwt) {
         return orderService.listSales(Long.parseLong(jwt.getSubject()));
+    }
+
+    @GetMapping("/purchases/page")
+    public OrdersPageResponse purchasesPage(@AuthenticationPrincipal Jwt jwt,
+                                            @RequestParam(defaultValue = "1") @Min(1) @Max(1000) int page,
+                                            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size,
+                                            @RequestParam(required = false) String status) {
+        return orderService.listPurchases(Long.parseLong(jwt.getSubject()), page, size, status);
+    }
+
+    @GetMapping("/sales/page")
+    public OrdersPageResponse salesPage(@AuthenticationPrincipal Jwt jwt,
+                                        @RequestParam(defaultValue = "1") @Min(1) @Max(1000) int page,
+                                        @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size,
+                                        @RequestParam(required = false) String status) {
+        return orderService.listSales(Long.parseLong(jwt.getSubject()), page, size, status);
     }
 
     @PostMapping("/{id}/cancel")

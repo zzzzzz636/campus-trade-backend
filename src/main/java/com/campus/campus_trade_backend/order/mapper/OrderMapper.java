@@ -72,11 +72,13 @@ public interface OrderMapper {
             JOIN app_user buyer ON buyer.id = o.buyer_id
             JOIN app_user seller ON seller.id = o.seller_id
             WHERE o.buyer_id = #{userId} OR o.seller_id = #{userId}
-            ORDER BY o.created_at DESC, o.id DESC LIMIT 50
+            ORDER BY o.created_at DESC, o.id DESC LIMIT #{limit} OFFSET #{offset}
             """)
-    List<OrderEntity> listForUser(@Param("userId") long userId);
+    List<OrderEntity> listForUser(@Param("userId") long userId, @Param("offset") int offset,
+                                  @Param("limit") int limit);
 
     @Select("""
+            <script>
             SELECT o.id, o.product_id, o.product_title_snapshot AS product_title,
                    (SELECT pi.id FROM product_image pi WHERE pi.product_id = o.product_id
                     ORDER BY pi.sort_order, pi.id LIMIT 1) AS product_cover_image_id,
@@ -87,11 +89,23 @@ public interface OrderMapper {
             JOIN app_user buyer ON buyer.id = o.buyer_id
             JOIN app_user seller ON seller.id = o.seller_id
             WHERE o.buyer_id = #{buyerId}
-            ORDER BY o.created_at DESC, o.id DESC LIMIT 50
+            <if test="status != null">AND o.status = #{status}</if>
+            ORDER BY o.created_at DESC, o.id DESC LIMIT #{limit} OFFSET #{offset}
+            </script>
             """)
-    List<OrderEntity> listForBuyer(@Param("buyerId") long buyerId);
+    List<OrderEntity> listForBuyer(@Param("buyerId") long buyerId, @Param("status") String status,
+                                   @Param("offset") int offset, @Param("limit") int limit);
 
     @Select("""
+            <script>SELECT COUNT(*) FROM trade_order
+            WHERE buyer_id = #{buyerId}
+            <if test="status != null">AND status = #{status}</if>
+            </script>
+            """)
+    long countForBuyer(@Param("buyerId") long buyerId, @Param("status") String status);
+
+    @Select("""
+            <script>
             SELECT o.id, o.product_id, o.product_title_snapshot AS product_title,
                    (SELECT pi.id FROM product_image pi WHERE pi.product_id = o.product_id
                     ORDER BY pi.sort_order, pi.id LIMIT 1) AS product_cover_image_id,
@@ -102,9 +116,20 @@ public interface OrderMapper {
             JOIN app_user buyer ON buyer.id = o.buyer_id
             JOIN app_user seller ON seller.id = o.seller_id
             WHERE o.seller_id = #{sellerId}
-            ORDER BY o.created_at DESC, o.id DESC LIMIT 50
+            <if test="status != null">AND o.status = #{status}</if>
+            ORDER BY o.created_at DESC, o.id DESC LIMIT #{limit} OFFSET #{offset}
+            </script>
             """)
-    List<OrderEntity> listForSeller(@Param("sellerId") long sellerId);
+    List<OrderEntity> listForSeller(@Param("sellerId") long sellerId, @Param("status") String status,
+                                    @Param("offset") int offset, @Param("limit") int limit);
+
+    @Select("""
+            <script>SELECT COUNT(*) FROM trade_order
+            WHERE seller_id = #{sellerId}
+            <if test="status != null">AND status = #{status}</if>
+            </script>
+            """)
+    long countForSeller(@Param("sellerId") long sellerId, @Param("status") String status);
 
     @Select("""
             SELECT id, product_id, buyer_id, seller_id,
@@ -121,9 +146,11 @@ public interface OrderMapper {
                 accepted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
             WHERE id = #{id} AND seller_id = #{sellerId}
               AND status = 'PENDING_SELLER_CONFIRMATION'
+              AND (expires_at IS NULL OR expires_at > #{now})
             """)
     int acceptPending(@Param("id") long id, @Param("sellerId") long sellerId,
-                      @Param("targetStatus") String targetStatus, @Param("note") String note);
+                      @Param("targetStatus") String targetStatus, @Param("note") String note,
+                      @Param("now") LocalDateTime now);
 
     @Update("""
             UPDATE trade_order
