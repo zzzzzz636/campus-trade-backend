@@ -2,7 +2,7 @@ import { $, conditionName, dateTime, el, money, state, toast } from './js/core.j
 import { api, configureApi } from './js/api.js';
 import { bindAuthEvents, configureAuth, logout, restoreSession } from './js/auth.js';
 import { bindProfileEvents, configureProfile, loadProfile, profileTab } from './js/profile.js';
-import { bindOrderEvents, closeOrderDetail, configureOrders, openPurchaseDialog } from './js/orders-v5.js';
+import { bindOrderEvents, closeOrderDetail, configureOrders, openOrderDetail, openPurchaseDialog } from './js/orders-v5.js';
 import { bindMessagingEvents, closeChat, configureMessaging, openConversation } from './js/messaging.js';
 import { configureFavorites, favoriteButton, loadFavoriteIds } from './js/favorites.js';
 
@@ -339,7 +339,9 @@ $('publish-back').addEventListener('click', () => {
 });
 $('detail-backdrop').addEventListener('click', closeDetail);
 $('close-detail').addEventListener('click', closeDetail);
-document.addEventListener('keydown', event => { if (event.key === 'Escape') closeDetail(); });
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && $('chat-overlay').hidden && $('order-overlay').hidden) closeDetail();
+});
 $('search-form').addEventListener('submit', event => {
   event.preventDefault();
   state.query = $('search-input').value.trim();
@@ -513,7 +515,11 @@ configureOrders({
   },
   openConversation
 });
-configureMessaging({ afterChange: async () => { if (state.view === 'profile') await loadProfile(); } });
+configureMessaging({
+  afterChange: async () => { if (state.view === 'profile') await loadProfile(); },
+  openProductDetail: openDetail,
+  openOrderDetail
+});
 configureFavorites({ openDetail, refreshProducts: loadProducts });
 bindAuthEvents();
 bindProfileEvents();

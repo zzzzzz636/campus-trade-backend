@@ -1,5 +1,8 @@
 package com.campus.campus_trade_backend;
 
+import com.campus.campus_trade_backend.messaging.dto.ConversationContextType;
+import com.campus.campus_trade_backend.messaging.dto.StartConversationRequest;
+import com.campus.campus_trade_backend.messaging.service.MessagingService;
 import com.campus.campus_trade_backend.order.service.OrderService;
 import com.campus.campus_trade_backend.product.dto.ConditionLevel;
 import com.campus.campus_trade_backend.product.dto.CreateProductRequest;
@@ -44,7 +47,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
         "spring.mail.port=1025",
         "spring.mail.properties.mail.smtp.auth=false",
         "spring.mail.properties.mail.smtp.starttls.enable=false",
-        "campus.mail.from=noreply@campustrade.local"
+        "campus.mail.from=noreply@campustrade.local",
+        "campus.messaging.max-per-minute=100"
 })
 class MySqlOrderConcurrencyIntegrationTests {
     @Container
@@ -56,6 +60,7 @@ class MySqlOrderConcurrencyIntegrationTests {
 
     @Autowired ProductService productService;
     @Autowired OrderService orderService;
+    @Autowired MessagingService messagingService;
     @Autowired JdbcTemplate jdbc;
 
     @Test
@@ -156,6 +161,35 @@ class MySqlOrderConcurrencyIntegrationTests {
         var order = orderService.create(editableId, buyerId, UUID.randomUUID().toString());
         assertEquals(new BigDecimal("18.50"), order.price());
         assertEquals(marker + " 已更新", order.productTitle());
+    }
+
+    @Test
+    void mysqlPersistsHistoryAndSupportsIncrementalMessageCursor() {
+        long sellerId = user("mysql-message-seller");
+        long buyerId = user("mysql-message-buyer");
+        long productId = product(sellerId, "MySQL 私信游标商品");
+        var conversation = messagingService.start(
+                new StartConversationRequest(ConversationContextType.PRODUCT, productId), buyerId);
+
+        long latestBuyerMessageId = 0;
+        for (int index = 1; index <= 35; index++) {
+            latestBuyerMessageId = messagingService.send(
+                    conversation.id(), buyerId, "MySQL 历史消息 " + index).id();
+        }
+        var firstPage = messagingService.messages(conversation.id(), buyerId, null, 30);
+        assertEquals(30, firstPage.items().size());
+        assertTrue(firstPage.hasMore());
+        assertTrue(firstPage.nextBeforeId() != null);
+        assertEquals("MySQL 历史消息 35", firstPage.items().get(29).content());
+
+        messagingService.send(conversation.id(), sellerId, "MySQL 增量回复");
+        var incremental = messagingService.messages(
+                conversation.id(), buyerId, null, latestBuyerMessageId, 20);
+        assertEquals(1, incremental.items().size());
+        assertEquals("MySQL 增量回复", incremental.items().get(0).content());
+        assertEquals(36L, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM private_message WHERE conversation_id = ?",
+                Long.class, conversation.id()));
     }
 
     @Test

@@ -10,6 +10,7 @@ import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.Response;
 import com.microsoft.playwright.options.AriaRole;
+import com.microsoft.playwright.options.BoundingBox;
 import com.microsoft.playwright.options.RequestOptions;
 import com.microsoft.playwright.options.WaitUntilState;
 import org.junit.jupiter.api.AfterEach;
@@ -26,15 +27,19 @@ import tools.jackson.databind.ObjectMapper;
 import java.util.Map;
 import java.nio.file.Path;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "spring.datasource.url=jdbc:h2:mem:campustrade_v4_browser;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE",
-        "campus.storage.upload-dir=${java.io.tmpdir}/campus-trade-v4-browser-images"
+        "campus.storage.upload-dir=${java.io.tmpdir}/campus-trade-v4-browser-images",
+        "campus.messaging.max-per-minute=100"
 })
 @EnabledOnOs(OS.WINDOWS)
 class V4BrowserFlowTests {
@@ -122,14 +127,113 @@ class V4BrowserFlowTests {
 
         buyer.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("联系卖家")).click();
         assertThat(buyer.locator("#chat-overlay")).isVisible();
+        assertThat(buyer.locator("#chat-title")).hasText("浏览器卖家 A");
+        assertThat(buyer.locator("#chat-context-title")).hasText(title);
+        Locator buyerComposer = buyer.locator("#message-content");
+        buyerComposer.dispatchEvent("compositionstart");
+        buyerComposer.fill("中文输入组合中");
+        buyerComposer.press("Enter");
+        assertTrue(buyerComposer.inputValue().contains("中文输入组合中"), "中文输入法组合期间不得误发送");
+        buyerComposer.dispatchEvent("compositionend");
+        buyerComposer.fill("第一行");
+        buyerComposer.press("Shift+Enter");
+        buyerComposer.type("第二行");
+        assertTrue(buyerComposer.inputValue().contains("\n"), "Shift+Enter 应插入换行");
+        AtomicInteger buyerMessagePolls = new AtomicInteger();
+        buyer.onRequest(request -> {
+            if (request.method().equals("GET") && request.url().contains("/api/conversations/")
+                    && request.url().contains("/messages")) buyerMessagePolls.incrementAndGet();
+        });
         Response message = buyer.waitForResponse(response -> response.url().contains("/api/conversations/")
                         && response.url().endsWith("/messages") && response.request().method().equals("POST"),
                 () -> {
                     buyer.locator("#message-form textarea").fill("请问明天下午可以面交吗？");
-                    buyer.locator("#message-form button[type=submit]").click();
+                    buyer.locator("#message-form textarea").press("Enter");
                 });
         assertEquals(201, message.status());
+        long conversationId = Long.parseLong(message.url().replaceAll(".*/conversations/(\\d+)/messages.*", "$1"));
+        assertThat(buyer.locator("#message-send-status")).containsText("已发送");
+        verifyChatLayouts(buyer);
+
+        seller.locator("#nav-profile").click();
+        seller.locator("#tab-messages").click();
+        assertThat(seller.locator("#message-count")).hasText("1");
+        Locator sellerConversation = seller.locator("#messages-pane .conversation-row")
+                .filter(new Locator.FilterOptions().setHasText(title));
+        assertThat(sellerConversation).containsText("请问明天下午可以面交吗？");
+        sellerConversation.click();
+        Response reply = seller.waitForResponse(response -> response.url().endsWith("/messages")
+                        && response.request().method().equals("POST"),
+                () -> {
+                    seller.locator("#message-content").fill("可以，下午三点见。");
+                    seller.locator("#message-content").press("Enter");
+                });
+        assertEquals(201, reply.status());
+        assertThat(buyer.locator("#chat-messages")).containsText("可以，下午三点见。");
+        seller.locator("#close-chat").click();
+
+        String conversationListPattern = "**/api/conversations?page=1&size=50";
+        AtomicBoolean failListRefresh = new AtomicBoolean(true);
+        buyer.route(conversationListPattern, route -> {
+            if (failListRefresh.compareAndSet(true, false)) route.abort();
+            else route.resume();
+        });
+        Response sentButRefreshFailed = buyer.waitForResponse(response -> response.url().endsWith("/messages")
+                        && response.request().method().equals("POST"),
+                () -> {
+                    buyerComposer.fill("消息成功但列表刷新失败测试");
+                    buyerComposer.press("Enter");
+                });
+        assertEquals(201, sentButRefreshFailed.status());
+        assertThat(buyer.locator("#message-send-status")).containsText("消息已发送");
+        buyer.unroute(conversationListPattern);
+
+        String messagePattern = "**/api/conversations/*/messages";
+        AtomicBoolean failSend = new AtomicBoolean(true);
+        buyer.route(messagePattern, route -> {
+            if (route.request().method().equals("POST") && failSend.compareAndSet(true, false)) route.abort();
+            else route.resume();
+        });
+        buyerComposer.fill("发送失败后应保留的内容");
+        buyerComposer.press("Enter");
+        assertThat(buyer.locator("#message-send-status")).containsText("发送失败");
+        assertEquals("发送失败后应保留的内容", buyerComposer.inputValue());
+        buyer.unroute(messagePattern);
+        buyerComposer.fill("");
+
+        String sellerToken = (String) seller.evaluate("sessionStorage.getItem('campusTradeToken')");
+        assertNotNull(sellerToken);
+        for (int index = 1; index <= 32; index++) {
+            APIResponse seeded = sellerContext.request().post(baseUrl() + "/api/conversations/" + conversationId + "/messages",
+                    RequestOptions.create().setHeader("Authorization", "Bearer " + sellerToken)
+                            .setData(Map.of("content", "历史消息 " + index)));
+            assertEquals(201, seeded.status());
+            seeded.dispose();
+        }
+
         buyer.locator("#close-chat").click();
+        int pollCountAfterClose = buyerMessagePolls.get();
+        buyer.waitForTimeout(3000);
+        assertEquals(pollCountAfterClose, buyerMessagePolls.get(), "关闭聊天后不应继续轮询");
+        buyer.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("联系卖家")).click();
+        assertThat(buyer.locator("#load-older-messages")).isVisible();
+        String readingAnchorId = (String) buyer.locator("#chat-messages").evaluate("""
+                host => [...host.querySelectorAll('.message-bubble')]
+                  .find(node => node.getBoundingClientRect().bottom > host.getBoundingClientRect().top + 1)?.dataset.messageId
+                """);
+        assertNotNull(readingAnchorId);
+        Locator readingAnchor = buyer.locator("[data-message-id='" + readingAnchorId + "']");
+        Number oldAnchorTop = (Number) readingAnchor.evaluate("node => node.getBoundingClientRect().top");
+        Response older = buyer.waitForResponse(response -> response.url().contains("beforeId=")
+                        && response.request().method().equals("GET"),
+                () -> buyer.locator("#load-older-messages").click());
+        assertEquals(200, older.status());
+        Number newAnchorTop = (Number) readingAnchor.evaluate("node => node.getBoundingClientRect().top");
+        double preservedOffsetError = Math.abs(newAnchorTop.doubleValue() - oldAnchorTop.doubleValue());
+        assertTrue(preservedOffsetError <= 2.0, "加载历史消息后阅读位置不应跳动");
+        buyer.locator("#chat-context").click();
+        assertThat(buyer.locator("#chat-overlay")).isHidden();
+        assertThat(buyer.locator("#detail-overlay")).isVisible();
 
         buyer.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("提交购买申请")).click();
         assertThat(buyer.locator("#purchase-dialog")).isVisible();
@@ -154,7 +258,7 @@ class V4BrowserFlowTests {
         seller.locator("#tab-sales").click();
         assertThat(seller.locator("#sales-pane").getByText(title)).isVisible();
         seller.locator("#tab-messages").click();
-        assertThat(seller.locator("#messages-pane")).containsText("请问明天下午可以面交吗？");
+        assertThat(seller.locator("#messages-pane")).containsText("历史消息 32");
         seller.locator("#tab-sales").click();
         seller.locator("#sales-pane .order-row").filter(new Locator.FilterOptions().setHasText(title)).click();
         assertThat(seller.locator("#order-detail-content")).containsText("等待卖家确认");
@@ -235,6 +339,36 @@ class V4BrowserFlowTests {
 
     private Locator listing(Page page, String title) {
         return page.locator("#listings-pane .list-row").filter(new Locator.FilterOptions().setHasText(title));
+    }
+
+    private void verifyChatLayouts(Page page) {
+        Path screenshots = Path.of("target", "v5.1-screenshots");
+        screenshots.toFile().mkdirs();
+        int[][] viewports = {{390, 844}, {428, 926}, {768, 1024}, {1280, 720}};
+        for (int[] viewport : viewports) {
+            page.setViewportSize(viewport[0], viewport[1]);
+            BoundingBox drawer = page.locator(".chat-drawer").boundingBox();
+            BoundingBox messages = page.locator("#chat-messages").boundingBox();
+            BoundingBox form = page.locator("#message-form").boundingBox();
+            BoundingBox send = page.locator("#send-message").boundingBox();
+            assertNotNull(drawer);
+            assertNotNull(messages);
+            assertNotNull(form);
+            assertNotNull(send);
+            assertTrue(messages.height > viewport[1] * 0.38, "聊天记录应占据主要空间");
+            assertTrue(form.y + form.height >= viewport[1] - 2, "输入区应固定在抽屉底部");
+            assertTrue(send.height >= 36 && send.height <= 56, "发送按钮高度不得被拉伸");
+            assertTrue(send.width >= 60 && send.width <= 130, "发送按钮宽度应保持可点击但不过宽");
+            assertTrue(drawer.height <= viewport[1] + 1, "聊天抽屉不得垂直溢出");
+            Boolean noHorizontalOverflow = (Boolean) page.evaluate("""
+                    () => document.documentElement.scrollWidth <= window.innerWidth
+                      && document.querySelector('.chat-drawer').scrollWidth <= document.querySelector('.chat-drawer').clientWidth
+                    """);
+            assertTrue(noHorizontalOverflow, "聊天抽屉不得水平溢出");
+            page.screenshot(new Page.ScreenshotOptions()
+                    .setPath(screenshots.resolve("chat-after-" + viewport[0] + ".png")));
+        }
+        page.setViewportSize(1280, 720);
     }
 
     private String baseUrl() {

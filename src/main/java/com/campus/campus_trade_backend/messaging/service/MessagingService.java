@@ -70,12 +70,23 @@ public class MessagingService {
     }
 
     public MessagePageResponse messages(long conversationId, long userId, Long beforeId, int size) {
+        return messages(conversationId, userId, beforeId, null, size);
+    }
+
+    public MessagePageResponse messages(long conversationId, long userId, Long beforeId, Long afterId, int size) {
         requireParticipant(conversationId, userId);
-        List<MessageEntity> rows = new ArrayList<>(messageMapper.listPage(conversationId, beforeId, size + 1));
+        if (beforeId != null && afterId != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "beforeId 与 afterId 不能同时使用");
+        }
+        List<MessageEntity> rows = new ArrayList<>(messageMapper.listPage(
+                conversationId, beforeId, afterId, size + 1));
         boolean hasMore = rows.size() > size;
         if (hasMore) rows.remove(rows.size() - 1);
-        Long nextBeforeId = hasMore && !rows.isEmpty() ? rows.get(rows.size() - 1).getId() : null;
-        Collections.reverse(rows);
+        Long nextBeforeId = null;
+        if (afterId == null) {
+            nextBeforeId = hasMore && !rows.isEmpty() ? rows.get(rows.size() - 1).getId() : null;
+            Collections.reverse(rows);
+        }
         return new MessagePageResponse(rows.stream().map(row -> toResponse(row, userId)).toList(),
                 nextBeforeId, hasMore);
     }

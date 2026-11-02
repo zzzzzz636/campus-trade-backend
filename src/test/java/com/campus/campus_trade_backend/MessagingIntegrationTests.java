@@ -42,7 +42,7 @@ class MessagingIntegrationTests {
         var context = new StartConversationRequest(ConversationContextType.PRODUCT, product);
         var conversation = messagingService.start(context, buyer);
         assertEquals(conversation.id(), messagingService.start(context, buyer).id());
-        messagingService.send(conversation.id(), buyer, "请问可以明天下午面交吗？");
+        var firstMessage = messagingService.send(conversation.id(), buyer, "请问可以明天下午面交吗？");
         messagingService.send(conversation.id(), buyer, "我在东区。 ");
 
         var sellerConversations = messagingService.list(seller, 1, 20);
@@ -58,6 +58,15 @@ class MessagingIntegrationTests {
         assertTrue(page.hasMore());
         assertTrue(page.nextBeforeId() != null);
         assertEquals("可以，食堂门口见。", page.items().get(1).content());
+
+        var incremental = messagingService.messages(conversation.id(), buyer, null, firstMessage.id(), 20);
+        assertEquals(2, incremental.items().size());
+        assertEquals("我在东区。", incremental.items().get(0).content());
+        assertEquals("可以，食堂门口见。", incremental.items().get(1).content());
+
+        ResponseStatusException conflictingCursor = assertThrows(ResponseStatusException.class,
+                () -> messagingService.messages(conversation.id(), buyer, firstMessage.id(), firstMessage.id(), 20));
+        assertEquals(HttpStatus.BAD_REQUEST, conflictingCursor.getStatusCode());
 
         ResponseStatusException forbidden = assertThrows(ResponseStatusException.class,
                 () -> messagingService.messages(conversation.id(), third, null, 20));

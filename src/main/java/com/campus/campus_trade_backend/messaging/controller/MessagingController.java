@@ -49,8 +49,9 @@ public class MessagingController {
     @GetMapping("/{id}/messages")
     public MessagePageResponse messages(@AuthenticationPrincipal Jwt jwt, @PathVariable @Min(1) long id,
                                         @RequestParam(required = false) @Min(1) Long beforeId,
+                                        @RequestParam(required = false) @Min(1) Long afterId,
                                         @RequestParam(defaultValue = "30") @Min(1) @Max(100) int size) {
-        return messagingService.messages(id, userId(jwt), beforeId, size);
+        return messagingService.messages(id, userId(jwt), beforeId, afterId, size);
     }
 
     @PostMapping("/{id}/messages")

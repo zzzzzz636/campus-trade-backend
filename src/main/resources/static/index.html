@@ -154,12 +154,26 @@
 
   <div id="chat-overlay" class="overlay" hidden>
     <div id="chat-backdrop" class="overlay-backdrop"></div>
-    <section class="detail-drawer chat-drawer" role="dialog" aria-modal="true" aria-labelledby="chat-title">
+    <section class="detail-drawer chat-drawer" role="dialog" aria-modal="true" aria-labelledby="chat-title" aria-describedby="chat-context">
       <button id="close-chat" class="close-button" type="button" aria-label="关闭私信">×</button>
-      <header class="chat-header"><span class="eyebrow">PRIVATE MESSAGES</span><h2 id="chat-title">站内私信</h2><p id="chat-context" class="subtle"></p></header>
+      <header class="chat-header">
+        <span class="eyebrow">PRIVATE MESSAGES</span>
+        <h2 id="chat-title">站内私信</h2>
+        <button id="chat-context" class="chat-context-link" type="button">
+          <span id="chat-context-kind">商品</span>
+          <strong id="chat-context-title">查看关联详情</strong>
+          <span aria-hidden="true">查看 →</span>
+        </button>
+        <p id="chat-poll-status" class="chat-status subtle" role="status" aria-live="polite">打开会话后自动获取新消息</p>
+      </header>
       <button id="load-older-messages" class="text-button chat-load-older" type="button" hidden>加载更早消息</button>
-      <div id="chat-messages" class="chat-messages" aria-live="polite"></div>
-      <form id="message-form" class="message-form"><textarea name="content" maxlength="1000" placeholder="输入消息，不要发送密码或其他敏感信息" required></textarea><button class="primary" type="submit">发送</button></form>
+      <div id="chat-messages" class="chat-messages" role="log" aria-live="polite" aria-relevant="additions"></div>
+      <form id="message-form" class="message-form">
+        <label class="sr-only" for="message-content">输入消息</label>
+        <textarea id="message-content" name="content" maxlength="1000" rows="2" placeholder="输入消息；Enter 发送，Shift+Enter 换行" required></textarea>
+        <button id="send-message" class="primary" type="submit">发送</button>
+        <span id="message-send-status" class="message-send-status subtle" role="status" aria-live="polite"></span>
+      </form>
     </section>
   </div>
 </body>

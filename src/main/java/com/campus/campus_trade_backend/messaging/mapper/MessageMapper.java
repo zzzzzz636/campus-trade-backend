@@ -32,12 +32,18 @@ public interface MessageMapper {
             FROM private_message m JOIN app_user u ON u.id = m.sender_id
             WHERE m.conversation_id = #{conversationId}
             <if test="beforeId != null">AND m.id &lt; #{beforeId}</if>
-            ORDER BY m.id DESC
+            <if test="afterId != null">AND m.id &gt; #{afterId}</if>
+            <choose>
+              <when test="afterId != null">ORDER BY m.id ASC</when>
+              <otherwise>ORDER BY m.id DESC</otherwise>
+            </choose>
             LIMIT #{limit}
             </script>
             """)
     List<MessageEntity> listPage(@Param("conversationId") long conversationId,
-                                 @Param("beforeId") Long beforeId, @Param("limit") int limit);
+                                 @Param("beforeId") Long beforeId,
+                                 @Param("afterId") Long afterId,
+                                 @Param("limit") int limit);
 
     @Update("""
             UPDATE private_message SET read_at = CURRENT_TIMESTAMP
