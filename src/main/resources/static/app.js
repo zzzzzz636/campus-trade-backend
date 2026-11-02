@@ -5,6 +5,7 @@ import { bindProfileEvents, configureProfile, loadProfile, profileTab } from './
 import { bindOrderEvents, closeOrderDetail, configureOrders, openOrderDetail, openPurchaseDialog } from './js/orders-v5.js';
 import { bindMessagingEvents, closeChat, configureMessaging, openConversation } from './js/messaging.js';
 import { configureFavorites, favoriteButton, loadFavoriteIds } from './js/favorites.js';
+import { bindNotificationEvents, configureNotifications } from './js/notifications.js';
 
 function navigate(view) {
   state.view = view;
@@ -521,8 +522,10 @@ configureMessaging({
   openOrderDetail
 });
 configureFavorites({ openDetail, refreshProducts: loadProducts });
+configureNotifications({ openOrder: openOrderDetail });
 bindAuthEvents();
 bindProfileEvents();
 bindOrderEvents();
 bindMessagingEvents();
+bindNotificationEvents();
 restoreSession();

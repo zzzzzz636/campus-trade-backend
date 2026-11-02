@@ -156,6 +156,8 @@ class V4BrowserFlowTests {
         verifyChatLayouts(buyer);
 
         seller.locator("#nav-profile").click();
+        seller.locator("#tab-notifications").click();
+        assertThat(seller.locator("#notification-count")).hasText("0");
         seller.locator("#tab-messages").click();
         assertThat(seller.locator("#message-count")).hasText("1");
         Locator sellerConversation = seller.locator("#messages-pane .conversation-row")
@@ -255,6 +257,12 @@ class V4BrowserFlowTests {
         seller.reload();
         assertThat(seller.locator("#app-view")).isVisible();
         seller.locator("#nav-profile").click();
+        seller.locator("#tab-notifications").click();
+        assertThat(seller.locator("#notification-count")).hasText("1");
+        seller.locator("#notifications-pane .notification-row").first().click();
+        assertThat(seller.locator("#order-overlay")).isVisible();
+        assertThat(seller.locator("#notification-count")).hasText("0");
+        seller.locator("#close-order-detail").click();
         seller.locator("#tab-sales").click();
         assertThat(seller.locator("#sales-pane").getByText(title)).isVisible();
         seller.locator("#tab-messages").click();

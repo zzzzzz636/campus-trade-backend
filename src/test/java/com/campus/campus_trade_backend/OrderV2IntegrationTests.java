@@ -9,6 +9,7 @@ import com.campus.campus_trade_backend.auth.verification.VerificationService;
 import com.campus.campus_trade_backend.auth.security.JwtService;
 import com.campus.campus_trade_backend.order.service.OrderService;
 import com.campus.campus_trade_backend.order.mapper.OrderMapper;
+import com.campus.campus_trade_backend.order.service.NotificationService;
 import com.campus.campus_trade_backend.order.dto.CreateOrderRequest;
 import com.campus.campus_trade_backend.order.dto.FulfillmentType;
 import com.campus.campus_trade_backend.order.dto.ShipOrderRequest;
@@ -55,6 +56,7 @@ class OrderV2IntegrationTests {
     @Autowired ProductService productService;
     @Autowired OrderService orderService;
     @Autowired OrderMapper orderMapper;
+    @Autowired NotificationService notificationService;
     @Autowired JdbcTemplate jdbc;
     @Autowired MockMvc mvc;
     @Autowired JwtService jwtService;
@@ -285,6 +287,27 @@ class OrderV2IntegrationTests {
         assertEquals(0, orderService.listPurchases(buyer.id(), 2, 1, "WAITING_HANDOFF").items().size());
         assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ResponseStatusException.class,
                 () -> orderService.listPurchases(buyer.id(), 1, 10, "WRONG")).getStatusCode());
+    }
+
+    @Test
+    void notificationIsPrivatePagedAndReadIsIdempotent() {
+        UserResponse seller = user("通知卖家");
+        UserResponse buyer = user("通知买家");
+        UserResponse stranger = user("通知路人");
+        var order = orderService.create(product(seller.id()), buyer.id(), key());
+        var sellerPage = notificationService.list(seller.id(), 1, 20);
+        assertEquals(1, sellerPage.total());
+        assertEquals("ORDER_APPLICATION", sellerPage.items().get(0).type());
+        assertEquals(order.id(), sellerPage.items().get(0).referenceId());
+        long notificationId = sellerPage.items().get(0).id();
+        assertEquals(1, notificationService.unreadCount(seller.id()));
+        assertEquals(0, notificationService.list(stranger.id(), 1, 20).total());
+        assertEquals(HttpStatus.NOT_FOUND, assertThrows(ResponseStatusException.class,
+                () -> notificationService.markRead(stranger.id(), notificationId)).getStatusCode());
+        notificationService.markRead(seller.id(), notificationId);
+        notificationService.markRead(seller.id(), notificationId);
+        assertEquals(0, notificationService.unreadCount(seller.id()));
+        assertEquals(0, notificationService.list(seller.id(), 2, 1).items().size());
     }
 
     private UserResponse user(String nickname) {

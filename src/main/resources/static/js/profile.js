@@ -3,6 +3,7 @@ import { api } from './api.js';
 import { emptyProfile, renderPurchases, renderSales, statusStyle } from './orders-v5.js';
 import { loadConversations } from './messaging.js';
 import { loadFavorites } from './favorites.js';
+import { loadNotifications, refreshNotificationCount } from './notifications.js';
 
 let hooks = {
   navigate: () => { }, openDetail: async () => { }, startEdit: () => { },
@@ -22,7 +23,7 @@ export function configureProfile(options) {
 
 export async function loadProfile() {
   const [purchases, sales, products] = await Promise.all([
-    loadOrderPage('purchases'), loadOrderPage('sales'), api('/api/products/me'), loadConversations(), loadFavorites()
+    loadOrderPage('purchases'), loadOrderPage('sales'), api('/api/products/me'), loadConversations(), loadFavorites(), refreshNotificationCount()
   ]);
   showOrderPage('purchases', purchases);
   showOrderPage('sales', sales);
@@ -52,9 +53,13 @@ async function changeOrderPage(kind, delta) {
 }
 
 export function profileTab(name) {
-  for (const tab of ['purchases', 'sales', 'listings', 'messages', 'favorites']) {
+  for (const tab of ['purchases', 'sales', 'listings', 'notifications', 'messages', 'favorites']) {
     $(`${tab}-pane`).hidden = tab !== name;
     if (tab === 'purchases' || tab === 'sales') $(`${tab}-pager`).hidden = tab !== name;
+    if (tab === 'notifications') {
+      $('notifications-pager').hidden = tab !== name;
+      if (tab === name) loadNotifications().catch(error => toast(`通知加载失败：${error.message}`, true));
+    }
     $(`tab-${tab}`).classList.toggle('active', tab === name);
   }
 }
@@ -78,6 +83,7 @@ export function bindProfileEvents() {
   $('tab-purchases').addEventListener('click', () => profileTab('purchases'));
   $('tab-sales').addEventListener('click', () => profileTab('sales'));
   $('tab-listings').addEventListener('click', () => profileTab('listings'));
+  $('tab-notifications').addEventListener('click', () => profileTab('notifications'));
   $('tab-messages').addEventListener('click', () => profileTab('messages'));
   $('tab-favorites').addEventListener('click', () => profileTab('favorites'));
 }
