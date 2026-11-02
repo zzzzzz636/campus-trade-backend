@@ -4,6 +4,7 @@ CREATE TABLE app_user (
     password_hash VARCHAR(255) NOT NULL,
     nickname VARCHAR(80) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    token_version INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -154,3 +155,16 @@ CREATE TABLE app_notification (
 );
 
 CREATE INDEX idx_notification_user_read ON app_notification (user_id, read_at, created_at, id);
+
+CREATE TABLE order_cancel_request (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    order_id BIGINT NOT NULL,
+    requester_id BIGINT NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    reason VARCHAR(300) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resolved_at TIMESTAMP,
+    CONSTRAINT fk_cancel_request_order FOREIGN KEY (order_id) REFERENCES trade_order(id),
+    CONSTRAINT fk_cancel_request_user FOREIGN KEY (requester_id) REFERENCES app_user(id)
+);
+CREATE INDEX idx_cancel_request_order_status ON order_cancel_request (order_id, status, id);

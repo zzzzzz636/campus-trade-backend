@@ -1,4 +1,5 @@
-import { $, conditionName, dateTime, el, money, statusName, toast } from './core.js';
+import { $, conditionName, dateTime, el, money, statusName, state, toast } from './core.js';
+import { logout } from './auth.js';
 import { api } from './api.js';
 import { emptyProfile, renderPurchases, renderSales, statusStyle } from './orders-v5.js';
 import { loadConversations } from './messaging.js';
@@ -53,7 +54,7 @@ async function changeOrderPage(kind, delta) {
 }
 
 export function profileTab(name) {
-  for (const tab of ['purchases', 'sales', 'listings', 'notifications', 'messages', 'favorites']) {
+  for (const tab of ['purchases', 'sales', 'listings', 'notifications', 'messages', 'favorites', 'account']) {
     $(`${tab}-pane`).hidden = tab !== name;
     if (tab === 'purchases' || tab === 'sales') $(`${tab}-pager`).hidden = tab !== name;
     if (tab === 'notifications') {
@@ -86,6 +87,34 @@ export function bindProfileEvents() {
   $('tab-notifications').addEventListener('click', () => profileTab('notifications'));
   $('tab-messages').addEventListener('click', () => profileTab('messages'));
   $('tab-favorites').addEventListener('click', () => profileTab('favorites'));
+  $('tab-account').addEventListener('click', () => {
+    $('nickname-form').elements.nickname.value = state.user?.nickname || '';
+    profileTab('account');
+  });
+  $('nickname-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const form = event.currentTarget; const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      state.user = await api('/api/auth/me', { method: 'PUT', body: JSON.stringify({ nickname: form.elements.nickname.value }) });
+      $('profile-name').textContent = state.user.nickname;
+      $('profile-avatar').textContent = $('header-avatar').textContent = state.user.nickname.trim().slice(0, 1);
+      toast('昵称已更新');
+    } catch (error) { toast(`修改昵称失败：${error.message}`, true); }
+    finally { button.disabled = false; }
+  });
+  $('password-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const form = event.currentTarget; const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      await api('/api/auth/me/password', { method: 'POST', body: JSON.stringify({
+        currentPassword: form.elements.currentPassword.value, newPassword: form.elements.newPassword.value
+      }) });
+      form.reset(); logout(false); toast('密码已修改，请重新登录');
+    } catch (error) { toast(`修改密码失败：${error.message}`, true); }
+    finally { button.disabled = false; }
+  });
 }
 
 function renderListings(products) {

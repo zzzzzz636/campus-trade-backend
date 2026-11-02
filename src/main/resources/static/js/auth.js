@@ -13,12 +13,14 @@ export function configureAuth(options) {
 
 export function setAuthMode(mode) {
   const register = mode === 'register';
-  $('login-form').hidden = register;
+  const reset = mode === 'reset';
+  $('login-form').hidden = register || reset;
   $('register-form').hidden = !register;
+  $('reset-form').hidden = !reset;
   $('show-login').classList.toggle('active', !register);
   $('show-register').classList.toggle('active', register);
-  $('auth-title').textContent = register ? '加入校园好物圈' : '欢迎回来';
-  $('auth-subtitle').textContent = register ? '创建账号，开始分享和发现闲置' : '登录后浏览校园里的闲置好物';
+  $('auth-title').textContent = reset ? '重置密码' : register ? '加入校园好物圈' : '欢迎回来';
+  $('auth-subtitle').textContent = reset ? '通过注册邮箱验证码设置新密码' : register ? '创建账号，开始分享和发现闲置' : '登录后浏览校园里的闲置好物';
 }
 
 export function logout(showMessage = true) {
@@ -58,8 +60,12 @@ export async function finishLogin(token) {
 export function bindAuthEvents() {
   $('show-login').addEventListener('click', () => setAuthMode('login'));
   $('show-register').addEventListener('click', () => setAuthMode('register'));
+  $('show-reset').addEventListener('click', () => setAuthMode('reset'));
+  $('reset-back').addEventListener('click', () => setAuthMode('login'));
+  $('send-reset-code').addEventListener('click', () => sendVerificationCode(true));
+  $('reset-form').addEventListener('submit', resetPassword);
   $('logout').addEventListener('click', () => logout());
-  $('send-code').addEventListener('click', sendVerificationCode);
+  $('send-code').addEventListener('click', () => sendVerificationCode(false));
   $('login-form').addEventListener('submit', login);
   $('register-form').addEventListener('submit', register);
 }
@@ -74,14 +80,14 @@ export async function restoreSession() {
   }
 }
 
-async function sendVerificationCode() {
-  const form = $('register-form');
+async function sendVerificationCode(reset = false) {
+  const form = $(reset ? 'reset-form' : 'register-form');
   const emailInput = form.elements.email;
   if (!emailInput.reportValidity()) return;
-  const button = $('send-code');
+  const button = $(reset ? 'send-reset-code' : 'send-code');
   button.disabled = true;
   try {
-    const result = await api('/api/auth/verification-codes', {
+    const result = await api(reset ? '/api/auth/password-reset-codes' : '/api/auth/verification-codes', {
       method: 'POST', body: JSON.stringify({ email: emailInput.value.trim() })
     });
     let remaining = 60;
@@ -100,6 +106,22 @@ async function sendVerificationCode() {
     button.disabled = false;
     toast(`验证码发送失败：${error.message}`, true);
   }
+}
+
+async function resetPassword(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector('button[type="submit"]');
+  const data = new FormData(form);
+  button.disabled = true;
+  try {
+    await api('/api/auth/password-reset', { method: 'POST', body: JSON.stringify({
+      email: String(data.get('email')), code: String(data.get('code')),
+      newPassword: String(data.get('newPassword'))
+    }) });
+    form.reset(); setAuthMode('login'); toast('密码已重置，请用新密码登录');
+  } catch (error) { toast(`重置失败：${error.message}`, true); }
+  finally { button.disabled = false; }
 }
 
 async function login(event) {

@@ -1,6 +1,7 @@
 package com.campus.campus_trade_backend.order.service;
 
 import com.campus.campus_trade_backend.order.dto.CreateOrderRequest;
+import com.campus.campus_trade_backend.order.dto.CancellationRequestResponse;
 import com.campus.campus_trade_backend.order.dto.FulfillmentType;
 import com.campus.campus_trade_backend.order.dto.OrderDetailResponse;
 import com.campus.campus_trade_backend.order.dto.OrderEventResponse;
@@ -10,6 +11,7 @@ import com.campus.campus_trade_backend.order.dto.ShipOrderRequest;
 import com.campus.campus_trade_backend.order.entity.OrderEntity;
 import com.campus.campus_trade_backend.order.entity.OrderEventEntity;
 import com.campus.campus_trade_backend.order.mapper.NotificationMapper;
+import com.campus.campus_trade_backend.order.mapper.CancellationRequestMapper;
 import com.campus.campus_trade_backend.order.mapper.OrderEventMapper;
 import com.campus.campus_trade_backend.order.mapper.OrderMapper;
 import com.campus.campus_trade_backend.product.entity.ProductEntity;
@@ -41,16 +43,19 @@ public class OrderService {
     private final OrderMapper orderMapper;
     private final OrderEventMapper orderEventMapper;
     private final NotificationMapper notificationMapper;
+    private final CancellationRequestMapper cancellationRequestMapper;
 
     @Value("${campus.order.confirmation-hours:24}")
     private long confirmationHours;
 
     public OrderService(ProductMapper productMapper, OrderMapper orderMapper,
-                        OrderEventMapper orderEventMapper, NotificationMapper notificationMapper) {
+                        OrderEventMapper orderEventMapper, NotificationMapper notificationMapper,
+                        CancellationRequestMapper cancellationRequestMapper) {
         this.productMapper = productMapper;
         this.orderMapper = orderMapper;
         this.orderEventMapper = orderEventMapper;
         this.notificationMapper = notificationMapper;
+        this.cancellationRequestMapper = cancellationRequestMapper;
     }
 
     @Transactional
@@ -171,6 +176,7 @@ public class OrderService {
     public OrderResponse ship(long orderId, long sellerId, ShipOrderRequest request) {
         OrderEntity order = requireLockedOrder(orderId);
         requireSeller(order, sellerId);
+        if (cancellationRequestMapper.findPending(orderId) != null) conflict("协商取消请求待处理，暂不能发货");
         if (!"WAITING_SHIPMENT".equals(order.getStatus()) ||
                 orderMapper.markShipped(orderId, sellerId, request.carrier().trim(), request.trackingNumber().trim()) != 1) {
             conflict("只有等待发货的快递订单可以确认发货");
@@ -185,6 +191,7 @@ public class OrderService {
     public OrderResponse complete(long orderId, long buyerId) {
         OrderEntity order = requireLockedOrder(orderId);
         requireBuyer(order, buyerId);
+        if (cancellationRequestMapper.findPending(orderId) != null) conflict("协商取消请求待处理，暂不能完成交易");
         String from = order.getStatus();
         if (!("WAITING_HANDOFF".equals(from) || "SHIPPED".equals(from)) ||
                 orderMapper.completeFulfillment(orderId, buyerId) != 1) {
@@ -225,6 +232,50 @@ public class OrderService {
         OrderEntity order = requireOrder(orderId);
         requireParticipant(order, userId);
         return toResponse(order);
+    }
+
+    public CancellationRequestResponse pendingCancellation(long orderId, long userId) {
+        requireParticipant(requireOrder(orderId), userId);
+        return cancellationRequestMapper.findPending(orderId);
+    }
+
+    @Transactional
+    public CancellationRequestResponse proposeCancellation(long orderId, long userId, String reason) {
+        OrderEntity order = requireLockedOrder(orderId);
+        requireParticipant(order, userId);
+        if (!Set.of("WAITING_HANDOFF", "WAITING_SHIPMENT").contains(order.getStatus())) {
+            conflict("只有已接受且尚未发货的订单可以协商取消");
+        }
+        if (cancellationRequestMapper.findPending(orderId) != null) conflict("已有待处理的协商取消请求");
+        cancellationRequestMapper.insert(orderId, userId, reason.trim());
+        record(orderId, userId, "CANCELLATION_REQUESTED", order.getStatus(), order.getStatus(), reason.trim());
+        long otherId = order.getBuyerId().equals(userId) ? order.getSellerId() : order.getBuyerId();
+        notifyUser(otherId, "CANCELLATION_REQUESTED", orderId, "对方请求协商取消订单");
+        return cancellationRequestMapper.findPending(orderId);
+    }
+
+    @Transactional
+    public OrderResponse resolveCancellation(long orderId, long userId, boolean accept) {
+        OrderEntity order = requireLockedOrder(orderId);
+        requireParticipant(order, userId);
+        CancellationRequestResponse pending = cancellationRequestMapper.findPending(orderId);
+        if (pending == null) conflict("没有待处理的协商取消请求");
+        if (pending.requesterId() == userId) conflict("发起者不能处理自己的请求");
+        if (!Set.of("WAITING_HANDOFF", "WAITING_SHIPMENT").contains(order.getStatus())) {
+            conflict("订单状态已变化，无法处理协商取消");
+        }
+        if (accept) {
+            if (orderMapper.cancelAfterAgreement(orderId) != 1) conflict("订单状态已变化，取消失败");
+            releaseProduct(order, "协商取消");
+            if (cancellationRequestMapper.resolve(pending.id(), "ACCEPTED") != 1) conflict("协商请求已处理");
+            record(orderId, userId, "CANCELLATION_ACCEPTED", order.getStatus(), "CANCELLED", null);
+            notifyUser(pending.requesterId(), "CANCELLATION_ACCEPTED", orderId, "对方同意协商取消，商品已恢复在售");
+        } else {
+            if (cancellationRequestMapper.resolve(pending.id(), "REJECTED") != 1) conflict("协商请求已处理");
+            record(orderId, userId, "CANCELLATION_REJECTED", order.getStatus(), order.getStatus(), null);
+            notifyUser(pending.requesterId(), "CANCELLATION_REJECTED", orderId, "对方拒绝协商取消，交易继续");
+        }
+        return toResponse(requireOrder(orderId));
     }
 
     public List<OrderResponse> listMine(long userId) {

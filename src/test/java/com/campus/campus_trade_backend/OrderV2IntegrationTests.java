@@ -1,6 +1,7 @@
 package com.campus.campus_trade_backend;
 
 import com.campus.campus_trade_backend.auth.dto.RegisterRequest;
+import com.campus.campus_trade_backend.auth.dto.LoginRequest;
 import com.campus.campus_trade_backend.auth.dto.UserResponse;
 import com.campus.campus_trade_backend.auth.service.AuthService;
 import com.campus.campus_trade_backend.auth.service.RegistrationService;
@@ -111,6 +112,7 @@ class OrderV2IntegrationTests {
     void removeTestRows() {
         for (long productId : productIds) jdbc.update("DELETE FROM app_notification WHERE reference_id IN (SELECT id FROM trade_order WHERE product_id = ?)", productId);
         for (long productId : productIds) jdbc.update("DELETE FROM order_event WHERE order_id IN (SELECT id FROM trade_order WHERE product_id = ?)", productId);
+        for (long productId : productIds) jdbc.update("DELETE FROM order_cancel_request WHERE order_id IN (SELECT id FROM trade_order WHERE product_id = ?)", productId);
         for (long productId : productIds) jdbc.update("DELETE FROM trade_order WHERE product_id = ?", productId);
         for (long productId : productIds) jdbc.update("DELETE FROM product WHERE id = ?", productId);
         for (long userId : userIds) jdbc.update("DELETE FROM app_user WHERE id = ?", userId);
@@ -308,6 +310,92 @@ class OrderV2IntegrationTests {
         notificationService.markRead(seller.id(), notificationId);
         assertEquals(0, notificationService.unreadCount(seller.id()));
         assertEquals(0, notificationService.list(seller.id(), 2, 1).items().size());
+    }
+
+    @Test
+    void profileAndPasswordResetRequireCorrectCredentialsAndRevokeOldJwt() throws Exception {
+        UserResponse user = user("原昵称");
+        String oldToken = "Bearer " + jwtService.issue(user.id()).accessToken();
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/auth/me")
+                        .header("Authorization", oldToken).contentType("application/json")
+                        .content("{\"nickname\":\"新昵称\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.nickname").value("新昵称"));
+        mvc.perform(post("/api/auth/me/password").header("Authorization", oldToken)
+                        .contentType("application/json")
+                        .content("{\"currentPassword\":\"wrong\",\"newPassword\":\"newpassword123\"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/auth/me/password").header("Authorization", oldToken)
+                        .contentType("application/json")
+                        .content("{\"currentPassword\":\"password123\",\"newPassword\":\"newpassword123\"}"))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/auth/me").header("Authorization", oldToken)).andExpect(status().isUnauthorized());
+        String email = user.email();
+        assertEquals(HttpStatus.UNAUTHORIZED, assertThrows(ResponseStatusException.class,
+                () -> authService.login(new LoginRequest(email, "password123"))).getStatusCode());
+        verificationService.sendForPasswordReset(email);
+        String code = localMail.latestCodeForTest(email);
+        assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ResponseStatusException.class,
+                () -> authService.resetPassword(email, "000000".equals(code) ? "111111" : "000000", "finalpassword123")).getStatusCode());
+        authService.resetPassword(email, code, "finalpassword123");
+        assertEquals(HttpStatus.GONE, assertThrows(ResponseStatusException.class,
+                () -> authService.resetPassword(email, code, "anotherpassword123")).getStatusCode());
+        assertTrue(authService.login(new LoginRequest(email, "finalpassword123")).accessToken().length() > 30);
+    }
+
+    @Test
+    void negotiatedCancellationRequiresOtherParticipantAndReleasesProduct() {
+        UserResponse seller = user("协商卖家");
+        UserResponse buyer = user("协商买家");
+        UserResponse stranger = user("协商路人");
+        long productId = product(seller.id());
+        var order = orderService.create(productId, buyer.id(), key());
+        orderService.accept(order.id(), seller.id(), null);
+        assertEquals(HttpStatus.FORBIDDEN, assertThrows(ResponseStatusException.class,
+                () -> orderService.proposeCancellation(order.id(), stranger.id(), "理由")).getStatusCode());
+        var pending = orderService.proposeCancellation(order.id(), buyer.id(), "临时有事");
+        assertEquals("PENDING", pending.status());
+        assertEquals(buyer.id(), pending.requesterId());
+        assertEquals(HttpStatus.CONFLICT, assertThrows(ResponseStatusException.class,
+                () -> orderService.proposeCancellation(order.id(), seller.id(), "另一个理由")).getStatusCode());
+        assertEquals(HttpStatus.CONFLICT, assertThrows(ResponseStatusException.class,
+                () -> orderService.resolveCancellation(order.id(), buyer.id(), true)).getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, assertThrows(ResponseStatusException.class,
+                () -> orderService.resolveCancellation(order.id(), stranger.id(), true)).getStatusCode());
+        assertEquals("WAITING_HANDOFF", orderService.resolveCancellation(order.id(), seller.id(), false).status());
+        assertEquals(null, orderService.pendingCancellation(order.id(), buyer.id()));
+        assertEquals(HttpStatus.CONFLICT, assertThrows(ResponseStatusException.class,
+                () -> orderService.resolveCancellation(order.id(), seller.id(), true)).getStatusCode());
+        orderService.proposeCancellation(order.id(), seller.id(), "无法交货");
+        assertEquals("CANCELLED", orderService.resolveCancellation(order.id(), buyer.id(), true).status());
+        assertEquals("ON_SALE", jdbc.queryForObject("SELECT status FROM product WHERE id = ?", String.class, productId));
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM order_cancel_request WHERE order_id = ?", Integer.class, order.id()));
+        assertEquals(HttpStatus.CONFLICT, assertThrows(ResponseStatusException.class,
+                () -> orderService.proposeCancellation(order.id(), buyer.id(), "重复")).getStatusCode());
+    }
+
+    @Test
+    void pendingCancellationBlocksShipmentAndFailureRollsBackResolution() {
+        UserResponse seller = user("发货卖家");
+        UserResponse buyer = user("发货买家");
+        long productId = product(seller.id());
+        var request = new CreateOrderRequest(productId, key(), FulfillmentType.SHIPPING,
+                null, null, "同学", "13800000000", "宿舍楼");
+        var order = orderService.create(request, buyer.id());
+        orderService.accept(order.id(), seller.id(), null);
+        orderService.proposeCancellation(order.id(), buyer.id(), "不需要了");
+        assertEquals(HttpStatus.CONFLICT, assertThrows(ResponseStatusException.class,
+                () -> orderService.ship(order.id(), seller.id(), new ShipOrderRequest("快递", "123"))).getStatusCode());
+        jdbc.update("UPDATE product SET status = 'OFF_SHELF' WHERE id = ?", productId);
+        assertEquals(HttpStatus.CONFLICT, assertThrows(ResponseStatusException.class,
+                () -> orderService.resolveCancellation(order.id(), seller.id(), true)).getStatusCode());
+        assertEquals("WAITING_SHIPMENT", orderService.findById(order.id(), buyer.id()).status());
+        assertEquals("PENDING", orderService.pendingCancellation(order.id(), buyer.id()).status());
+        jdbc.update("UPDATE product SET status = 'RESERVED' WHERE id = ?", productId);
+        orderService.resolveCancellation(order.id(), seller.id(), false);
+        assertEquals("SHIPPED", orderService.ship(order.id(), seller.id(),
+                new ShipOrderRequest("快递", "123")).status());
+        assertEquals(HttpStatus.CONFLICT, assertThrows(ResponseStatusException.class,
+                () -> orderService.proposeCancellation(order.id(), buyer.id(), "已发货")).getStatusCode());
     }
 
     private UserResponse user(String nickname) {

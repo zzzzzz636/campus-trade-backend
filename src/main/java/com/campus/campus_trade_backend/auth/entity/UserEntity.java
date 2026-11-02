@@ -6,6 +6,7 @@ public class UserEntity {
     private String passwordHash;
     private String nickname;
     private String status;
+    private Integer tokenVersion;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -17,4 +18,6 @@ public class UserEntity {
     public void setNickname(String nickname) { this.nickname = nickname; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public Integer getTokenVersion() { return tokenVersion; }
+    public void setTokenVersion(Integer tokenVersion) { this.tokenVersion = tokenVersion; }
 }

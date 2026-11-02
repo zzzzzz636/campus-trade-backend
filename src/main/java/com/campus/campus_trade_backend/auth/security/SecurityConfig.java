@@ -45,7 +45,8 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         .requestMatchers(HttpMethod.GET, "/", "/index.html", "/styles.css", "/app.js", "/js/**", "/favicon.ico").permitAll()
                         .requestMatchers(HttpMethod.GET, "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/verification-codes").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/verification-codes",
+                                "/api/auth/password-reset-codes", "/api/auth/password-reset").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/products/me").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/products", "/api/products/*", "/api/categories").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/product-images/*/content").permitAll()
@@ -93,7 +94,9 @@ public class SecurityConfig {
             try {
                 long userId = Long.parseLong(jwt.getSubject());
                 UserEntity user = userMapper.findById(userId);
-                if (user != null && "ACTIVE".equals(user.getStatus())) {
+                Object version = jwt.getClaim("tv");
+                if (user != null && "ACTIVE".equals(user.getStatus()) && version instanceof Number number
+                        && number.intValue() == user.getTokenVersion()) {
                     return OAuth2TokenValidatorResult.success();
                 }
             } catch (NumberFormatException ignored) { }

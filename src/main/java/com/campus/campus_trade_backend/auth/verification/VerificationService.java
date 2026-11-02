@@ -34,14 +34,24 @@ public class VerificationService {
     }
 
     public VerificationCodeResponse send(String rawEmail) {
+        return sendCode(rawEmail, "register");
+    }
+
+    public VerificationCodeResponse sendForPasswordReset(String rawEmail) {
+        return sendCode(rawEmail, "reset");
+    }
+
+    private VerificationCodeResponse sendCode(String rawEmail, String purpose) {
         String email = normalizeEmail(rawEmail);
-        if (userMapper.findByEmail(email) != null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "邮箱已注册");
+        var user = userMapper.findByEmail(email);
+        if ("register".equals(purpose) && user != null) throw new ResponseStatusException(HttpStatus.CONFLICT, "邮箱已注册");
+        if ("reset".equals(purpose) && (user == null || !"ACTIVE".equals(user.getStatus()))) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "账号不存在或不可用");
         }
-        String key = hmacHex("email:" + email);
+        String key = hmacHex(purpose + ":email:" + email);
         String code = String.format(Locale.ROOT, "%06d", random.nextInt(1_000_000));
         try {
-            store.save(key, hmacHex("code:" + email + ":" + code));
+            store.save(key, hmacHex(purpose + ":code:" + email + ":" + code));
         } catch (DataAccessException e) {
             clearQuietly(key);
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "验证码服务暂不可用", e);
@@ -57,13 +67,21 @@ public class VerificationService {
     }
 
     public void verifyAndConsume(String rawEmail, String code) {
+        verifyAndConsume(rawEmail, code, "register");
+    }
+
+    public void verifyResetAndConsume(String rawEmail, String code) {
+        verifyAndConsume(rawEmail, code, "reset");
+    }
+
+    private void verifyAndConsume(String rawEmail, String code, String purpose) {
         if (code == null || !code.matches("[0-9]{6}")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "验证码应为六位数字");
         }
         String email = normalizeEmail(rawEmail);
         VerificationCodeStore.Result result;
         try {
-            result = store.consume(hmacHex("email:" + email), hmacHex("code:" + email + ":" + code));
+            result = store.consume(hmacHex(purpose + ":email:" + email), hmacHex(purpose + ":code:" + email + ":" + code));
         } catch (DataAccessException | IllegalStateException e) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "验证码服务暂不可用", e);
         }

@@ -171,6 +171,13 @@ public interface OrderMapper {
     int cancelPending(@Param("id") long id, @Param("buyerId") long buyerId);
 
     @Update("""
+            UPDATE trade_order SET status = 'CANCELLED', cancelled_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = #{id} AND status IN ('WAITING_HANDOFF', 'WAITING_SHIPMENT')
+            """)
+    int cancelAfterAgreement(@Param("id") long id);
+
+    @Update("""
             UPDATE trade_order
             SET status = 'SHIPPED', shipping_carrier = #{carrier}, tracking_number = #{trackingNumber},
                 shipped_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP

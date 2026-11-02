@@ -1,6 +1,8 @@
 package com.campus.campus_trade_backend.order.controller;
 
 import com.campus.campus_trade_backend.order.dto.CreateOrderRequest;
+import com.campus.campus_trade_backend.order.dto.CancellationRequestResponse;
+import com.campus.campus_trade_backend.order.dto.ProposeCancellationRequest;
 import com.campus.campus_trade_backend.order.dto.OrderDecisionRequest;
 import com.campus.campus_trade_backend.order.dto.OrderDetailResponse;
 import com.campus.campus_trade_backend.order.dto.OrderResponse;
@@ -101,5 +103,29 @@ public class OrderController {
     @GetMapping("/{id}")
     public OrderDetailResponse detail(@AuthenticationPrincipal Jwt jwt, @PathVariable @Min(1) long id) {
         return orderService.findDetail(id, Long.parseLong(jwt.getSubject()));
+    }
+
+    @GetMapping("/{id}/cancel-request")
+    public CancellationRequestResponse pendingCancellation(@AuthenticationPrincipal Jwt jwt,
+                                                            @PathVariable @Min(1) long id) {
+        return orderService.pendingCancellation(id, Long.parseLong(jwt.getSubject()));
+    }
+
+    @PostMapping("/{id}/cancel-request")
+    @ResponseStatus(HttpStatus.CREATED)
+    public CancellationRequestResponse proposeCancellation(@AuthenticationPrincipal Jwt jwt,
+                                                            @PathVariable @Min(1) long id,
+                                                            @Valid @RequestBody ProposeCancellationRequest request) {
+        return orderService.proposeCancellation(id, Long.parseLong(jwt.getSubject()), request.reason());
+    }
+
+    @PostMapping("/{id}/cancel-request/accept")
+    public OrderResponse acceptCancellation(@AuthenticationPrincipal Jwt jwt, @PathVariable @Min(1) long id) {
+        return orderService.resolveCancellation(id, Long.parseLong(jwt.getSubject()), true);
+    }
+
+    @PostMapping("/{id}/cancel-request/reject")
+    public OrderResponse rejectCancellation(@AuthenticationPrincipal Jwt jwt, @PathVariable @Min(1) long id) {
+        return orderService.resolveCancellation(id, Long.parseLong(jwt.getSubject()), false);
     }
 }

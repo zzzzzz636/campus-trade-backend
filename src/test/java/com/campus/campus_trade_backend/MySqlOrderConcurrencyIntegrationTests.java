@@ -65,7 +65,7 @@ class MySqlOrderConcurrencyIntegrationTests {
 
     @Test
     void flywayCreatesCurrentSchemaAndRequiredIndexes() {
-        assertEquals(3L, jdbc.queryForObject(
+        assertEquals(5L, jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1", Long.class));
         assertEquals(5L, jdbc.queryForObject("SELECT COUNT(*) FROM category", Long.class));
         assertTrue(indexExists("product", "idx_product_status_created_id"));
@@ -74,6 +74,7 @@ class MySqlOrderConcurrencyIntegrationTests {
         assertTrue(indexExists("trade_order", "idx_order_status_expires"));
         assertTrue(indexExists("private_message", "idx_message_conversation_id"));
         assertTrue(indexExists("product_favorite", "idx_favorite_user_created"));
+        assertTrue(indexExists("order_cancel_request", "idx_cancel_request_order_status"));
     }
 
     @Test
@@ -218,6 +219,44 @@ class MySqlOrderConcurrencyIntegrationTests {
             else {
                 assertEquals("CANCELLED", orderStatus);
                 assertEquals("ON_SALE", productStatus);
+            }
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    @Timeout(30)
+    void negotiatedCancellationResolutionIsSerializedInInnoDb() throws Exception {
+        long sellerId = user("negotiation-seller");
+        long buyerId = user("negotiation-buyer");
+        long productId = product(sellerId, "协商取消并发商品");
+        var order = orderService.create(productId, buyerId, UUID.randomUUID().toString());
+        orderService.accept(order.id(), sellerId, null);
+        orderService.proposeCancellation(order.id(), buyerId, "不再需要");
+        var executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<Boolean> accepted = executor.submit(() -> raceAction(ready, start,
+                    () -> orderService.resolveCancellation(order.id(), sellerId, true)));
+            Future<Boolean> rejected = executor.submit(() -> raceAction(ready, start,
+                    () -> orderService.resolveCancellation(order.id(), sellerId, false)));
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+            assertEquals(1, (accepted.get(15, TimeUnit.SECONDS) ? 1 : 0)
+                    + (rejected.get(15, TimeUnit.SECONDS) ? 1 : 0));
+            String status = jdbc.queryForObject("SELECT status FROM trade_order WHERE id = ?", String.class, order.id());
+            String productStatus = jdbc.queryForObject("SELECT status FROM product WHERE id = ?", String.class, productId);
+            String requestStatus = jdbc.queryForObject("SELECT status FROM order_cancel_request WHERE order_id = ?", String.class, order.id());
+            if ("CANCELLED".equals(status)) {
+                assertEquals("ON_SALE", productStatus);
+                assertEquals("ACCEPTED", requestStatus);
+            } else {
+                assertEquals("WAITING_HANDOFF", status);
+                assertEquals("RESERVED", productStatus);
+                assertEquals("REJECTED", requestStatus);
             }
         } finally {
             start.countDown();

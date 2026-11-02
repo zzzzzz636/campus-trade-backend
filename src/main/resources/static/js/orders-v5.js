@@ -85,14 +85,16 @@ export function closeOrderDetail() { $('order-overlay').hidden = true; }
 
 export async function openOrderDetail(orderId) {
   try {
-    const order = await api(`/api/orders/${orderId}`);
-    renderOrderDetail(order);
+    const [order, cancellation] = await Promise.all([
+      api(`/api/orders/${orderId}`), api(`/api/orders/${orderId}/cancel-request`)
+    ]);
+    renderOrderDetail(order, cancellation);
     $('order-overlay').hidden = false;
     $('close-order-detail').focus();
   } catch (error) { toast(`订单详情加载失败：${error.message}`, true); }
 }
 
-function renderOrderDetail(order) {
+function renderOrderDetail(order, cancellation) {
   const host = $('order-detail-content');
   host.replaceChildren();
   const header = el('div', '', 'order-detail-header');
@@ -120,12 +122,13 @@ function renderOrderDetail(order) {
   if (order.recipientName) facts.append(fact('收件信息', `${order.recipientName} · ${order.recipientPhone}\n${order.shippingAddress}`));
   if (order.shippingCarrier) facts.append(fact('物流信息', `${order.shippingCarrier} · ${order.trackingNumber}`));
   if (order.sellerDecisionNote) facts.append(fact('卖家备注', order.sellerDecisionNote));
+  if (cancellation) facts.append(fact('协商取消待处理', cancellation.reason));
   host.append(facts);
 
   const actions = el('section', '', 'order-detail-actions');
   actions.append(actionButton(order.viewerRole === 'BUYER' ? '联系卖家' : '联系买家', 'outline-btn',
     () => hooks.openConversation('ORDER', order.id)));
-  addStateActions(actions, order);
+  addStateActions(actions, order, cancellation);
   host.append(actions, timeline(order.events || []));
 }
 
@@ -160,10 +163,28 @@ function timeline(events) {
 function eventLabel(type) {
   return ({ BUYER_APPLIED: '买家提交购买申请', SELLER_ACCEPTED: '卖家接受申请', SELLER_REJECTED: '卖家拒绝申请',
     BUYER_CANCELLED: '买家取消申请', SELLER_SHIPPED: '卖家确认发货', BUYER_COMPLETED: '买家确认收货',
-    APPLICATION_EXPIRED: '购买申请超时', V5_MIGRATED: '历史订单迁移到 V5' })[type] || type;
+    APPLICATION_EXPIRED: '购买申请超时', V5_MIGRATED: '历史订单迁移到 V5',
+    CANCELLATION_REQUESTED: '发起协商取消', CANCELLATION_ACCEPTED: '同意协商取消',
+    CANCELLATION_REJECTED: '拒绝协商取消' })[type] || type;
 }
 
-function addStateActions(host, order) {
+function addStateActions(host, order, cancellation) {
+  if (['WAITING_HANDOFF', 'WAITING_SHIPMENT'].includes(order.status)) {
+    const myId = order.viewerRole === 'BUYER' ? order.buyerId : order.sellerId;
+    if (cancellation) {
+      if (cancellation.requesterId === myId) host.append(el('p', '已提出协商取消，等待对方处理。', 'subtle'));
+      else host.append(actionButton('同意取消并恢复商品在售', 'outline-btn danger-outline',
+        () => transition(order.id, 'cancel-request/accept', '双方已同意取消，商品恢复在售')),
+      actionButton('拒绝取消，继续交易', 'outline-btn',
+        () => transition(order.id, 'cancel-request/reject', '已拒绝协商取消')));
+    } else host.append(actionButton('申请协商取消', 'outline-btn', async () => {
+      const reason = window.prompt('请填写取消原因，等待对方同意后才会生效');
+      if (reason === null) return;
+      if (!reason.trim()) throw new Error('请填写取消原因');
+      if (reason.length > 300) throw new Error('取消原因最多 300 字');
+      await transition(order.id, 'cancel-request', '协商取消请求已发出', { reason: reason.trim() });
+    }));
+  }
   if (order.viewerRole === 'SELLER' && order.status === 'PENDING_SELLER_CONFIRMATION') {
     host.append(actionButton('接受购买申请', 'primary', () => decision(order.id, 'accept')),
       actionButton('拒绝并恢复商品在售', 'outline-btn danger-outline', () => decision(order.id, 'reject')));
@@ -171,7 +192,7 @@ function addStateActions(host, order) {
   if (order.viewerRole === 'BUYER' && order.status === 'PENDING_SELLER_CONFIRMATION') {
     host.append(actionButton('取消购买申请', 'outline-btn danger-outline', () => transition(order.id, 'cancel', '购买申请已取消')));
   }
-  if (order.viewerRole === 'SELLER' && order.status === 'WAITING_SHIPMENT') {
+  if (order.viewerRole === 'SELLER' && order.status === 'WAITING_SHIPMENT' && !cancellation) {
     const form = el('form', '', 'shipping-form');
     const carrier = document.createElement('input'); carrier.placeholder = '快递公司'; carrier.maxLength = 80; carrier.required = true;
     const tracking = document.createElement('input'); tracking.placeholder = '运单号'; tracking.maxLength = 100; tracking.required = true;
@@ -184,7 +205,7 @@ function addStateActions(host, order) {
     });
     host.append(form);
   }
-  if (order.viewerRole === 'BUYER' && ['WAITING_HANDOFF', 'SHIPPED'].includes(order.status)) {
+  if (order.viewerRole === 'BUYER' && ['WAITING_HANDOFF', 'SHIPPED'].includes(order.status) && !cancellation) {
     host.append(actionButton(order.status === 'SHIPPED' ? '确认收货并完成交易' : '确认已面交并完成交易', 'primary', async () => {
       if (!window.confirm('请确认你已经收到并检查商品。完成后不可撤销。')) return;
       await transition(order.id, 'complete', '交易已完成');
@@ -211,7 +232,9 @@ async function decision(orderId, action) {
 
 async function transition(orderId, action, success, body = null) {
   await api(`/api/orders/${orderId}/${action}`, { method: 'POST', body: body ? JSON.stringify(body) : undefined });
-  await Promise.all([openOrderDetail(orderId), hooks.refresh()]); toast(success);
+  toast(success);
+  const results = await Promise.allSettled([openOrderDetail(orderId), hooks.refresh()]);
+  if (results.some(result => result.status === 'rejected')) toast('操作已成功，但列表刷新失败；请手动刷新页面。', true);
 }
 
 export function bindOrderEvents() {
