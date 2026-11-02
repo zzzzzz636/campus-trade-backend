@@ -13,7 +13,7 @@
 
 ## 未执行或未验证
 
-- `MySqlOrderConcurrencyIntegrationTests` **6 个跳过**：需 `-Dcampus.mysql.tests=true` 且 Docker 引擎可连接。本机 `docker info` 报 `dockerDesktopLinuxEngine` 管道不存在。迁移 V4/V5、InnoDB 订单竞争、协商取消竞争未在本轮 MySQL 运行。
+- `MySqlOrderConcurrencyIntegrationTests` **6 个跳过**：需 `-Dcampus.mysql.tests=true` 且 Docker 引擎可连接。本机 `docker info` 报 `dockerDesktopLinuxEngine` 管道不存在；本轮尝试启动已安装的 Docker Desktop 后仍无后台引擎。迁移 V4/V5、InnoDB 订单竞争、协商取消竞争未在本轮 MySQL 运行。
 - `DockerMailRedisIntegrationTests` **2 个跳过**：本机 Redis 6379、Mailpit 1025/8025 不可用。真实 Redis Lua、验证码存储与 SMTP 发送尚未重验。
 - 没有 `CAMPUS_AI_API_KEY`，仅模拟 HTTP 与无密钥降级用例通过，**未调用真实模型**。
 - 当前终端没有 MySQL 连接凭据，未执行 `EXPLAIN ANALYZE`；见 [`V6_PERFORMANCE.md`](V6_PERFORMANCE.md)。
