@@ -94,6 +94,12 @@ class OrderV2IntegrationTests {
 
         mvc.perform(get("/api/orders/sales").header("Authorization", sellerToken))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(order.id()));
+        mvc.perform(get("/api/orders/sales/page?page=0").header("Authorization", sellerToken))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/orders/purchases/page?size=51").header("Authorization", buyerToken))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/notifications?page=0").header("Authorization", buyerToken))
+                .andExpect(status().isBadRequest());
         mvc.perform(post("/api/orders/{id}/cancel", order.id()).header("Authorization", sellerToken))
                 .andExpect(status().isForbidden());
         mvc.perform(post("/api/orders/{id}/cancel", order.id()).header("Authorization", buyerToken))
@@ -292,7 +298,38 @@ class OrderV2IntegrationTests {
     }
 
     @Test
-    void notificationIsPrivatePagedAndReadIsIdempotent() {
+    @Timeout(20)
+    void expiredAcceptanceCannotWinAgainstExpiryWorker() throws Exception {
+        UserResponse seller = user("竞争卖家");
+        UserResponse buyer = user("竞争买家");
+        long productId = product(seller.id());
+        var order = orderService.create(productId, buyer.id(), key());
+        jdbc.update("UPDATE trade_order SET expires_at = ? WHERE id = ?", LocalDateTime.now().minusSeconds(1), order.id());
+        var executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<HttpStatus> accept = executor.submit(() -> {
+                ready.countDown(); start.await();
+                try { orderService.accept(order.id(), seller.id(), null); return HttpStatus.OK; }
+                catch (ResponseStatusException error) { return (HttpStatus) error.getStatusCode(); }
+            });
+            Future<Integer> expire = executor.submit(() -> {
+                ready.countDown(); start.await(); return orderService.expirePendingOrders(10);
+            });
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+            assertEquals(HttpStatus.CONFLICT, accept.get(10, TimeUnit.SECONDS));
+            assertEquals(1, expire.get(10, TimeUnit.SECONDS));
+            assertEquals("EXPIRED", orderService.findById(order.id(), buyer.id()).status());
+            assertEquals("ON_SALE", jdbc.queryForObject("SELECT status FROM product WHERE id = ?", String.class, productId));
+        } finally {
+            start.countDown(); executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void notificationIsPrivatePagedAndReadIsIdempotent() throws Exception {
         UserResponse seller = user("通知卖家");
         UserResponse buyer = user("通知买家");
         UserResponse stranger = user("通知路人");
@@ -306,6 +343,9 @@ class OrderV2IntegrationTests {
         assertEquals(0, notificationService.list(stranger.id(), 1, 20).total());
         assertEquals(HttpStatus.NOT_FOUND, assertThrows(ResponseStatusException.class,
                 () -> notificationService.markRead(stranger.id(), notificationId)).getStatusCode());
+        mvc.perform(post("/api/notifications/{id}/read", notificationId)
+                        .header("Authorization", "Bearer " + jwtService.issue(seller.id()).accessToken()))
+                .andExpect(status().isNoContent());
         notificationService.markRead(seller.id(), notificationId);
         notificationService.markRead(seller.id(), notificationId);
         assertEquals(0, notificationService.unreadCount(seller.id()));

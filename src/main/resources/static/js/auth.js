@@ -5,7 +5,7 @@ let hooks = {
   navigate: () => { }, closeDetail: () => { }, loadCategories: async () => { },
   loadProducts: async () => { }, resetProductDraft: () => { }
 };
-let codeCountdownTimer;
+const codeCountdownTimers = new Map();
 
 export function configureAuth(options) {
   hooks = { ...hooks, ...options };
@@ -17,7 +17,7 @@ export function setAuthMode(mode) {
   $('login-form').hidden = register || reset;
   $('register-form').hidden = !register;
   $('reset-form').hidden = !reset;
-  $('show-login').classList.toggle('active', !register);
+  $('show-login').classList.toggle('active', !register && !reset);
   $('show-register').classList.toggle('active', register);
   $('auth-title').textContent = reset ? '重置密码' : register ? '加入校园好物圈' : '欢迎回来';
   $('auth-subtitle').textContent = reset ? '通过注册邮箱验证码设置新密码' : register ? '创建账号，开始分享和发现闲置' : '登录后浏览校园里的闲置好物';
@@ -91,16 +91,18 @@ async function sendVerificationCode(reset = false) {
       method: 'POST', body: JSON.stringify({ email: emailInput.value.trim() })
     });
     let remaining = 60;
-    clearInterval(codeCountdownTimer);
+    clearInterval(codeCountdownTimers.get(button.id));
     button.textContent = `${remaining} 秒后重试`;
-    codeCountdownTimer = setInterval(() => {
+    const timer = setInterval(() => {
       remaining--;
       if (remaining <= 0) {
-        clearInterval(codeCountdownTimer);
+        clearInterval(timer);
+        codeCountdownTimers.delete(button.id);
         button.textContent = '重新获取';
         button.disabled = false;
       } else button.textContent = `${remaining} 秒后重试`;
     }, 1000);
+    codeCountdownTimers.set(button.id, timer);
     toast(result.deliveryMode === 'SMTP' ? '验证码邮件已发送，请检查邮箱' : '本地验证码已生成，请查看后端控制台');
   } catch (error) {
     button.disabled = false;

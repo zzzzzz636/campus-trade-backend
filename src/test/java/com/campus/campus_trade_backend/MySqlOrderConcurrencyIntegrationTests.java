@@ -40,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @EnabledIfSystemProperty(named = "campus.mysql.tests", matches = "true")
 @ActiveProfiles("mysql")
 @SpringBootTest(properties = {
+        "CAMPUS_DB_PASSWORD=integration-test-only",
         "CAMPUS_JWT_SECRET=QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE=",
         "spring.flyway.baseline-on-migrate=false",
         "spring.data.redis.url=redis://127.0.0.1:6379",

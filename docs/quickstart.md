@@ -1,6 +1,6 @@
 # CampusTrade 后端快速运行
 
-项目使用 Java 17 和 Maven Wrapper。默认 `local` 配置使用 H2 内存数据库，启动时自动建立用户、分类、商品、图片和订单表并插入两条演示商品；重启后数据恢复为种子状态。演示用户没有可登录密码，请自行注册。`local` 验证码只打印在后端控制台，MySQL 配置使用 Redis 与 SMTP。
+项目使用 Java 17 和 Maven Wrapper。默认 `local` 配置使用 H2 内存数据库，启动时自动建立业务表并插入演示商品；重启后数据恢复为种子状态。演示用户没有可登录密码，请自行注册。`local` 验证码只打印在后端控制台，MySQL 配置使用 Redis 与 SMTP。V6 新增通知中心、协商取消、个人资料/密码操作和订单分页。
 
 在 `E:\campus-trade-backend` 的 PowerShell 终端中运行：
 
@@ -29,14 +29,16 @@ docker compose -f docker-compose.dev.yml up -d
 docker compose -f docker-compose.dev.yml ps
 ```
 
+需要连应用一起构建运行时，先停止 IDEA 中占用 8080 的实例，再执行 `docker compose -f docker-compose.dev.yml --profile app up -d --build`。上传图片保存在独立命名卷中。详见 [`V6_DEPLOYMENT.md`](V6_DEPLOYMENT.md)。
+
 Docker MySQL 默认位于 `127.0.0.1:3307`，避免与 Windows 本机 MySQL 的 3306 冲突；Redis 位于 `127.0.0.1:6379`；Mailpit SMTP 位于 `127.0.0.1:1025`，邮件界面为 `http://localhost:8025/`。三者都使用命名卷，重建普通容器不会删除数据。Mailpit 只用于本地验证真实 SMTP 调用，不会把邮件投递到互联网。
 
 ## 切换到 MySQL
 
 V3 使用 Flyway 管理 MySQL 表结构：
 
-- 对全新的空数据库，应用首次启动会自动执行 `V1__create_v2_baseline_schema.sql` 和 `V2__seed_categories.sql`。
-- 对已经手工完成 V2 三份旧 SQL 的非空数据库，Flyway 会登记一个版本 2 基线，不会重建表或删除数据。首次接管前应备份，并确认 `app_user`、`category`、`product`、`product_image`、`trade_order` 五张表均存在。
+- 对全新的空数据库，应用首次启动会按顺序执行 V1–V5 迁移。
+- 对已经手工完成 V2 三份旧 SQL 的非空数据库，Flyway 会登记一个版本 2 基线，接着执行 V3–V5；不会重建基础表或删除数据。首次接管前应备份，并确认 `app_user`、`category`、`product`、`product_image`、`trade_order` 五张表均存在。
 - 接入 Flyway 后不要再重跑 `schema.sql`、`mysql-v1-extra.sql`、`mysql-v2-order.sql` 或 `mysql-v2-images.sql`。后续结构变化只增加新的版本迁移文件。
 
 从新的 PowerShell 启动 Docker MySQL 配置时，先读取 `.env` 中你设置的值并在同一终端运行。以下密码和 JWT 示例必须替换为 `.env` 中的实际本机值：

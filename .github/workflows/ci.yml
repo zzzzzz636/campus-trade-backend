@@ -1,0 +1,50 @@
+name: CampusTrade CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  unit-and-h2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Compile and run unit/H2 tests
+        run: bash ./mvnw -B test
+
+  mysql-redis-smtp:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports: [ '6379:6379' ]
+      mailpit:
+        image: axllent/mailpit:v1.27
+        ports: [ '1025:1025', '8025:8025' ]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Run MySQL Testcontainers and real Redis/SMTP integration tests
+        run: bash ./mvnw -B '-Dcampus.mysql.tests=true' '-Dtest=MySqlOrderConcurrencyIntegrationTests,DockerMailRedisIntegrationTests' test
+
+  browser-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Run two-user Edge browser flows
+        shell: pwsh
+        run: .\mvnw.cmd -B '-Dtest=V4BrowserFlowTests' test

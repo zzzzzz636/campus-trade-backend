@@ -305,6 +305,63 @@ class V4BrowserFlowTests {
         assertThat(buyer.locator("#auth-view")).isVisible();
     }
 
+    @Test
+    @Timeout(90)
+    void negotiatedCancellationAndAccountSettingsWorkInBrowser() {
+        String marker = UUID.randomUUID().toString().substring(0, 8);
+        String title = "V6 协商教材 " + marker;
+        Page seller = sellerContext.newPage();
+        Page buyer = buyerContext.newPage();
+        register(seller, "v6-seller-" + marker + "@example.invalid", "V6 卖家");
+        publish(seller, title);
+        register(buyer, "v6-buyer-" + marker + "@example.invalid", "V6 买家");
+        searchAndOpen(buyer, title);
+        buyer.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("提交购买申请")).click();
+        Response created = buyer.waitForResponse(response -> response.url().endsWith("/api/orders")
+                        && response.request().method().equals("POST"),
+                () -> buyer.locator("#purchase-form button[type=submit]").click());
+        assertEquals(201, created.status());
+        long orderId = objectMapper.readTree(created.text()).path("id").asLong();
+
+        seller.reload(); seller.locator("#nav-profile").click(); seller.locator("#tab-sales").click();
+        seller.locator("#sales-pane .order-row").filter(new Locator.FilterOptions().setHasText(title)).click();
+        seller.onDialog(dialog -> dialog.accept());
+        Response accepted = seller.waitForResponse(response -> response.url().endsWith("/api/orders/" + orderId + "/accept"),
+                () -> seller.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("接受购买申请")).click());
+        assertEquals(200, accepted.status());
+
+        buyer.reload(); buyer.locator("#nav-profile").click();
+        buyer.locator("#purchases-pane .order-row").filter(new Locator.FilterOptions().setHasText(title)).click();
+        buyer.onceDialog(dialog -> dialog.accept("时间冲突"));
+        Response proposed = buyer.waitForResponse(response -> response.url().endsWith("/cancel-request")
+                        && response.request().method().equals("POST"),
+                () -> buyer.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("申请协商取消")).click());
+        assertEquals(201, proposed.status());
+        assertThat(buyer.locator("#order-detail-content")).containsText("等待对方处理");
+
+        seller.reload(); seller.locator("#nav-profile").click(); seller.locator("#tab-sales").click();
+        seller.locator("#sales-pane .order-row").filter(new Locator.FilterOptions().setHasText(title)).click();
+        assertThat(seller.locator("#order-detail-content")).containsText("时间冲突");
+        Response resolved = seller.waitForResponse(response -> response.url().endsWith("/cancel-request/accept"),
+                () -> seller.getByRole(AriaRole.BUTTON,
+                        new Page.GetByRoleOptions().setName("同意取消并恢复商品在售")).click());
+        assertEquals(200, resolved.status());
+        assertThat(seller.locator("#order-detail-content")).containsText("已取消");
+        seller.locator("#close-order-detail").click();
+        seller.locator("#tab-listings").click();
+        assertThat(listing(seller, title)).containsText("在售");
+
+        seller.locator("#tab-account").click();
+        seller.locator("#nickname-form [name=nickname]").fill("V6 新昵称");
+        seller.locator("#nickname-form button[type=submit]").click();
+        assertThat(seller.locator("#profile-name")).hasText("V6 新昵称");
+        seller.locator("#password-form [name=currentPassword]").fill("password123");
+        seller.locator("#password-form [name=newPassword]").fill("newpassword123");
+        seller.locator("#password-form button[type=submit]").click();
+        assertThat(seller.locator("#auth-view")).isVisible();
+        assertNull(seller.evaluate("sessionStorage.getItem('campusTradeToken')"));
+    }
+
     private void register(Page page, String email, String nickname) {
         page.navigate(baseUrl(), new Page.NavigateOptions().setWaitUntil(WaitUntilState.NETWORKIDLE));
         page.locator("#show-register").click();

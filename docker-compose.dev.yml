@@ -1,4 +1,32 @@
 services:
+  app:
+    profiles: ["app"]
+    build: .
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      CAMPUS_DB_URL: jdbc:mysql://mysql:3306/${CAMPUS_MYSQL_DATABASE:-campus_trade}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+      CAMPUS_DB_USER: ${CAMPUS_DB_USER:-campus_trade}
+      CAMPUS_DB_PASSWORD: ${CAMPUS_DB_PASSWORD}
+      CAMPUS_JWT_SECRET: ${CAMPUS_JWT_SECRET}
+      CAMPUS_REDIS_URL: redis://redis:6379
+      CAMPUS_SMTP_HOST: mailpit
+      CAMPUS_SMTP_PORT: "1025"
+      CAMPUS_SMTP_AUTH: "false"
+      CAMPUS_SMTP_STARTTLS: "false"
+      CAMPUS_SMTP_FROM: noreply@campustrade.local
+      CAMPUS_AI_ENABLED: ${CAMPUS_AI_ENABLED:-false}
+      CAMPUS_AI_API_KEY: ${CAMPUS_AI_API_KEY:-}
+    volumes:
+      - campus-trade-upload-data:/data/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+
   mysql:
     image: mysql:8.4
     container_name: campus-trade-mysql
@@ -49,3 +77,4 @@ volumes:
   campus-trade-mysql-data:
   campus-trade-redis-data:
   campus-trade-mailpit-data:
+  campus-trade-upload-data:

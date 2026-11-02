@@ -146,7 +146,7 @@ public interface OrderMapper {
                 accepted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
             WHERE id = #{id} AND seller_id = #{sellerId}
               AND status = 'PENDING_SELLER_CONFIRMATION'
-              AND (expires_at IS NULL OR expires_at > #{now})
+              AND (expires_at IS NULL OR (expires_at > #{now} AND expires_at > CURRENT_TIMESTAMP))
             """)
     int acceptPending(@Param("id") long id, @Param("sellerId") long sellerId,
                       @Param("targetStatus") String targetStatus, @Param("note") String note,
