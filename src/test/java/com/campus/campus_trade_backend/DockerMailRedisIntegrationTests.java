@@ -3,6 +3,7 @@ package com.campus.campus_trade_backend;
 import com.campus.campus_trade_backend.auth.dto.RegisterRequest;
 import com.campus.campus_trade_backend.auth.service.RegistrationService;
 import com.campus.campus_trade_backend.auth.verification.VerificationService;
+import com.campus.campus_trade_backend.security.RedisWindowRateLimiter;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +29,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 
 @ActiveProfiles("docker-test")
 @SpringBootTest(properties = {
@@ -55,6 +59,18 @@ class DockerMailRedisIntegrationTests {
     @Autowired RegistrationService registrationService;
     @Autowired StringRedisTemplate redis;
     @Autowired JdbcTemplate jdbc;
+
+    @Test
+    void redisRateLimitIsSharedAndExpires() {
+        Assumptions.assumeTrue(portOpen(6379), "Redis 未运行，跳过真实限流测试");
+        String key = "ct:rate:test:" + UUID.randomUUID();
+        RedisWindowRateLimiter.check(redis, key, 2, "过于频繁");
+        RedisWindowRateLimiter.check(redis, key, 2, "过于频繁");
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS, assertThrows(ResponseStatusException.class,
+                () -> RedisWindowRateLimiter.check(redis, key, 2, "过于频繁")).getStatusCode());
+        assertTrue(redis.getExpire(key) > 0);
+        redis.delete(key);
+    }
 
     @Test
     void sendsSmtpMailStoresDigestInRedisAndConsumesCode() throws Exception {
