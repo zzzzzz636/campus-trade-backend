@@ -97,22 +97,23 @@
     <section id="publish-view" class="page-shell inner-page" hidden>
       <button class="back-link" id="publish-back" type="button">← 返回商品广场</button>
       <div class="page-title"><span id="publish-eyebrow" class="eyebrow">SELL AN ITEM</span><h1 id="publish-title">发布你的闲置</h1><p id="publish-subtitle">写清楚物品情况，方便同学了解。发布后会出现在商品广场。</p></div>
-      <div class="form-panel"><form id="publish-form" class="stack-form">
-        <div class="form-row"><label>商品分类<select name="categoryId" id="category-select" required></select></label><label>商品成色<select name="conditionLevel"><option value="NEW">全新</option><option value="LIKE_NEW">近新</option><option value="GOOD">良好</option><option value="FAIR">可用</option></select></label></div>
-        <label>商品标题<input name="title" maxlength="120" placeholder="例如：高等数学教材，九成新" required></label>
-        <label>商品描述<textarea name="description" maxlength="5000" placeholder="使用情况、瑕疵、交付方式…" required></textarea></label>
-        <div id="ai-draft-panel" class="ai-draft-panel">
-          <div><span class="ai-badge">AI 辅助</span><strong>把原始描述整理得更清楚</strong><p>先在上方写下真实的物品情况，AI 会建议标题、描述和分类；生成后仍由你检查并确认发布。</p></div>
-          <button id="ai-draft-button" class="ai-draft-button" type="button">✨ AI 帮我整理</button>
-        </div>
-        <label>期望价格（元）<input name="price" type="number" min="0.01" max="99999999.99" step="0.01" placeholder="0.00" required></label>
-        <label class="upload-field">商品照片（最多 6 张）
-          <input id="product-images" type="file" accept="image/jpeg,image/png,image/webp" multiple>
-          <span class="subtle">支持 JPEG、PNG、WebP，单张不超过 5 MB；第一张将作为封面。</span>
+      <div class="publish-layout"><div class="form-panel"><form id="publish-form" class="stack-form">
+        <div class="form-section-title"><strong>商品照片</strong><span>最多 6 张，第一张作为封面</span></div>
+        <label class="upload-field"><span class="upload-icon" aria-hidden="true">＋</span><strong>选择商品照片</strong><span>支持 JPEG、PNG、WebP，单张不超过 5 MB</span>
+          <input id="product-images" type="file" accept="image/jpeg,image/png,image/webp" multiple aria-label="选择商品照片">
         </label>
         <div id="image-preview" class="image-preview" aria-live="polite"></div>
-        <div class="form-footer"><span id="publish-form-tip" class="subtle">发布前可以预览并移除已选择的照片。</span><button id="publish-submit" class="primary" type="submit">确认发布 →</button></div>
-      </form></div>
+        <div class="form-section-title details-title"><strong>商品信息</strong><span>描述越准确，交易越顺利</span></div>
+        <label>商品标题<input name="title" maxlength="120" placeholder="例如：高等数学教材，九成新" required></label>
+        <div class="form-row"><label>期望价格（元）<input name="price" type="text" inputmode="decimal" maxlength="11" placeholder="例如 35.00" autocomplete="off" required></label><label>商品分类<select name="categoryId" id="category-select" required></select></label></div>
+        <label>商品成色<select name="conditionLevel"><option value="NEW">全新</option><option value="LIKE_NEW">近新</option><option value="GOOD">良好</option><option value="FAIR">可用</option></select></label>
+        <label>商品描述<textarea name="description" maxlength="5000" placeholder="说明使用情况、已知瑕疵和方便的交付方式…" required></textarea></label>
+        <div id="ai-draft-panel" class="ai-draft-panel">
+          <div><span class="ai-badge">AI 辅助</span><strong>把原始描述整理得更清楚</strong><p>先在上方写下真实的物品情况，AI 会建议标题、描述和分类；生成后仍由你检查并确认发布。</p></div>
+          <button id="ai-draft-button" class="ai-draft-button" type="button">AI 帮我整理</button>
+        </div>
+        <div class="form-footer"><span id="publish-form-tip" class="subtle">请如实填写物品情况，发布后可以编辑。</span><div class="publish-controls"><button id="publish-preview" class="outline-btn" type="button">预览商品</button><button id="publish-submit" class="primary" type="submit">确认发布 →</button></div></div>
+      </form></div><aside class="publish-assist"><span class="eyebrow">发布小贴士</span><h2>让好物被看见</h2><ol><li>上传光线清晰的实物照片，展示重要细节。</li><li>注明使用情况和瑕疵，减少来回沟通。</li><li>参考同类商品，填写合适的价格。</li></ol><p>发布后，同学可以通过商品详情与你私信或提交购买申请。</p></aside></div>
     </section>
 
     <section id="profile-view" class="page-shell inner-page" hidden>
@@ -138,13 +139,14 @@
 
   <div id="detail-overlay" class="overlay" hidden>
     <div class="overlay-backdrop" id="detail-backdrop"></div>
-    <section class="detail-drawer" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+    <section class="detail-drawer product-detail-drawer" role="dialog" aria-modal="true" aria-labelledby="detail-title">
       <button id="close-detail" class="close-button" type="button" aria-label="关闭商品详情">×</button>
-      <div id="detail-cover" class="detail-cover" aria-hidden="true">🛍️</div>
-      <div id="detail-images" class="detail-images"></div>
-      <div class="detail-content"><span id="detail-category" class="tag"></span><h2 id="detail-title"></h2><p id="detail-seller" class="subtle"></p><p id="detail-published" class="subtle"></p><strong id="detail-price" class="detail-price"></strong><div class="detail-divider"></div><h3>商品说明</h3><p id="detail-description" class="detail-description"></p><p id="detail-condition" class="subtle"></p><div id="detail-actions" class="detail-actions"></div></div>
+      <div class="detail-gallery"><div id="detail-cover" class="detail-cover"></div><div id="detail-images" class="detail-images"></div></div>
+      <div class="detail-content"><div class="detail-topline"><span id="detail-category" class="tag"></span><span id="detail-status" class="status"></span></div><h2 id="detail-title"></h2><p id="detail-condition" class="detail-condition"></p><strong id="detail-price" class="detail-price"></strong><div class="seller-panel"><span id="detail-seller-avatar" class="avatar">同</span><div><strong id="detail-seller"></strong><p id="detail-published" class="subtle"></p></div></div><div class="detail-divider"></div><h3>商品说明</h3><p id="detail-description" class="detail-description"></p><div id="detail-actions" class="detail-actions"></div><p class="detail-trade-note">与卖家确认物品情况和交易方式；平台当前不接入在线支付。</p></div>
     </section>
   </div>
+
+  <dialog id="publish-preview-dialog" class="modal-card publish-preview-dialog" aria-labelledby="publish-preview-title"><div class="modal-heading"><div><span class="eyebrow">发布预览</span><h2 id="publish-preview-title">同学将看到的商品信息</h2></div><button id="close-publish-preview" class="modal-close" type="button" aria-label="关闭预览">×</button></div><div id="publish-preview-content"></div><p class="subtle">这只是预览，商品尚未发布。</p></dialog>
 
   <dialog id="purchase-dialog" class="modal-card">
     <form id="purchase-form" class="stack-form">

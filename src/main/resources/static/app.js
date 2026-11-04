@@ -1,4 +1,4 @@
-import { $, conditionName, dateTime, el, emptyPhoto, money, state, toast } from './js/core.js';
+import { $, conditionName, dateTime, el, emptyPhoto, money, state, statusName, toast } from './js/core.js';
 import { api, configureApi } from './js/api.js';
 import { bindAuthEvents, configureAuth, logout, restoreSession } from './js/auth.js';
 import { bindProfileEvents, configureProfile, loadProfile, profileTab } from './js/profile.js';
@@ -213,9 +213,7 @@ function renderDetailImages(product, own) {
       }
       strip.append(item);
     }
-  } else {
-    coverHost.textContent = iconFor(product);
-  }
+  } else coverHost.append(emptyPhoto());
   if (own && !['RESERVED', 'SOLD'].includes(product.status) && images.length < 6) {
     const add = el('label', '＋ 添加照片', 'detail-add-image');
     const input = document.createElement('input');
@@ -247,11 +245,14 @@ async function openDetail(id) {
     renderDetailImages(product, managingFromProfile && product.status === 'ON_SALE');
     $('detail-category').textContent = displayCategory(product);
     $('detail-title').textContent = product.title;
-    $('detail-seller').textContent = `发布者 · ${product.sellerNickname || '校园同学'}`;
+    $('detail-status').textContent = statusName[product.status] || product.status;
+    $('detail-status').className = `status ${product.status === 'ON_SALE' ? '' : 'down'}`;
+    $('detail-seller').textContent = product.sellerNickname || '校园同学';
+    $('detail-seller-avatar').textContent = (product.sellerNickname || '同').slice(0, 1);
     $('detail-published').textContent = product.createdAt ? `发布于 ${dateTime(product.createdAt)}` : '';
     $('detail-price').textContent = money(product.price);
     $('detail-description').textContent = product.description;
-    $('detail-condition').textContent = `商品成色：${conditionName[product.condition] || product.condition}`;
+    $('detail-condition').textContent = `成色：${conditionName[product.condition] || product.condition}`;
     const actions = $('detail-actions');
     actions.replaceChildren();
     if (!own) actions.append(favoriteButton(product.id));
@@ -458,6 +459,46 @@ function renderImagePreview() {
   });
 }
 
+let previewObjectUrl = null;
+function closePublishPreview() {
+  $('publish-preview-dialog').close();
+  if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+  previewObjectUrl = null;
+}
+$('publish-preview').addEventListener('click', () => {
+  const form = $('publish-form');
+  const host = $('publish-preview-content');
+  host.replaceChildren();
+  const photo = el('div', '', 'publish-preview-photo');
+  const file = state.pendingImages[0];
+  const existing = state.editingProduct?.images?.[0]?.url;
+  if (file || existing) {
+    const image = document.createElement('img');
+    previewObjectUrl = file ? URL.createObjectURL(file) : null;
+    image.src = previewObjectUrl || existing;
+    image.alt = '商品封面预览';
+    photo.append(image);
+  } else photo.append(emptyPhoto());
+  const text = el('div', '', 'publish-preview-info');
+  const title = form.elements.title.value.trim();
+  const price = form.elements.price.value;
+  text.append(el('span', categoryName(form.elements.categoryId.value), 'tag'),
+    el('h3', title || '尚未填写标题'),
+    el('strong', price && Number(price) > 0 ? money(price) : '尚未填写价格', 'detail-price'),
+    el('p', `成色：${conditionName[form.elements.conditionLevel.value] || '尚未选择'}`, 'subtle'),
+    el('p', form.elements.description.value.trim() || '尚未填写商品描述', 'detail-description'));
+  host.append(photo, text);
+  $('publish-preview-dialog').showModal();
+});
+$('close-publish-preview').addEventListener('click', closePublishPreview);
+$('publish-preview-dialog').addEventListener('click', event => {
+  if (event.target === $('publish-preview-dialog')) closePublishPreview();
+});
+$('publish-preview-dialog').addEventListener('close', () => {
+  if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+  previewObjectUrl = null;
+});
+
 $('ai-draft-button').addEventListener('click', async () => {
   const form = $('publish-form');
   const rawTitle = form.elements.title.value.trim();
@@ -488,7 +529,7 @@ $('ai-draft-button').addEventListener('click', async () => {
     toast(`AI 整理未完成：${error.message}。原内容已保留，可以继续手动发布。`, true);
   } finally {
     button.disabled = false;
-    button.textContent = '✨ AI 帮我整理';
+    button.textContent = 'AI 帮我整理';
   }
 });
 
@@ -499,9 +540,15 @@ $('publish-form').addEventListener('submit', async event => {
   const form = new FormData(formElement);
   const button = formElement.querySelector('button[type="submit"]');
   const editing = state.editingProduct;
+  const priceText = String(form.get('price')).trim();
+  if (!/^(?:0|[1-9]\d{0,7})(?:\.\d{1,2})?$/.test(priceText) || Number(priceText) <= 0) {
+    toast('价格应大于 0，最多两位小数，且不超过 99999999.99 元', true);
+    formElement.elements.price.focus();
+    return;
+  }
   const payload = {
     categoryId: Number(form.get('categoryId')), title: String(form.get('title')),
-    description: String(form.get('description')), price: Number(form.get('price')),
+    description: String(form.get('description')), price: Number(priceText),
     conditionLevel: String(form.get('conditionLevel'))
   };
   button.disabled = true;

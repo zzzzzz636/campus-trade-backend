@@ -408,7 +408,7 @@ class V4BrowserFlowTests {
         String phase = System.getProperty("campus.ui.capture");
         if (phase == null || !phase.matches("before|after")) return;
         String only = System.getProperty("campus.ui.only");
-        if (only != null && !only.equals(name)) return;
+        if (only != null && !java.util.Arrays.asList(only.split(",")).contains(name)) return;
         Path directory = Path.of("docs", "ui-screenshots", phase);
         try { Files.createDirectories(directory); }
         catch (Exception error) { throw new IllegalStateException("无法创建 UI 截图目录", error); }
