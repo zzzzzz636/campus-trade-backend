@@ -72,26 +72,19 @@
       </div>
     </header>
 
-    <section id="home-view" class="page-shell">
-      <section class="hero" aria-labelledby="home-hero-title">
-        <div class="hero-copy"><span class="eyebrow">校园闲置 · 重新流转</span><h1 id="home-hero-title">你闲置的，<br><em>正是别人需要的。</em></h1><p>在熟悉的校园里，找到价格合适、方便见面的好物。</p></div>
-        <div class="hero-action"><span>从分享一件闲置开始</span><button id="home-publish" class="primary" type="button">发布闲置 <span aria-hidden="true">↗</span></button></div>
-      </section>
-
-      <div class="section-heading"><div><span class="eyebrow">正在流转</span><h2>发现校园好物</h2></div><p>真实发布，按你的条件慢慢挑。</p></div>
-      <form id="search-form" class="search-form" role="search"><svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg><input id="search-input" name="q" type="search" maxlength="100" placeholder="搜教材、数码、宿舍好物…" aria-label="搜索商品"><button class="primary" type="submit">搜索</button></form>
-      <div id="category-shortcuts" class="category-shortcuts" aria-label="快速选择分类"></div>
-      <div class="filter-bar" aria-label="商品筛选与排序">
-        <label>分类<select id="category-filter"><option value="">全部分类</option></select></label>
-        <label>最低价<input id="min-price-filter" type="text" inputmode="decimal" maxlength="11" placeholder="¥ 不限" autocomplete="off"></label>
-        <label>最高价<input id="max-price-filter" type="text" inputmode="decimal" maxlength="11" placeholder="¥ 不限" autocomplete="off"></label>
-        <label>排序<select id="sort-filter"><option value="NEWEST">最新发布</option><option value="PRICE_ASC">价格从低到高</option><option value="PRICE_DESC">价格从高到低</option></select></label>
+    <section id="home-view" class="page-shell market-page">
+      <div id="market-preview-note" class="market-preview-note" hidden><strong>本地设计预览</strong><span>以下 12 件商品和图片仅用于布局验证，不来自业务数据库，也不能收藏或购买。</span><a href="/">返回真实平台</a></div>
+      <div class="market-intro"><div><span class="market-kicker">CAMPUS MARKETPLACE</span><h1>发现校园好物</h1><p>教材、数码、宿舍好物，就在同学之间流转。</p></div><div class="market-intro-actions"><form id="search-form" class="search-form market-search" role="search"><svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg><input id="search-input" name="q" type="search" maxlength="100" placeholder="搜索教材、数码、宿舍好物" aria-label="搜索商品"><button type="submit">搜索</button></form><button id="home-publish" class="market-sell-button" type="button">发布闲置 <span aria-hidden="true">↗</span></button></div></div>
+      <div class="market-layout">
+        <div id="filter-backdrop" class="filter-backdrop" hidden></div>
+        <aside id="market-filters" class="market-filters" aria-label="筛选商品">
+          <div class="market-filter-heading"><h2>筛选</h2><button id="close-filters" class="filter-close" type="button" aria-label="关闭筛选">×</button></div>
+          <div class="market-filter-group"><h3>分类</h3><div id="category-shortcuts" class="market-categories" aria-label="选择商品分类"></div><select id="category-filter" hidden aria-hidden="true" tabindex="-1"><option value="">全部分类</option></select></div>
+          <div class="market-filter-group"><h3>价格区间</h3><div class="market-price-fields"><label>最低价<input id="min-price-filter" type="text" inputmode="decimal" maxlength="11" placeholder="不限" autocomplete="off"></label><span aria-hidden="true">—</span><label>最高价<input id="max-price-filter" type="text" inputmode="decimal" maxlength="11" placeholder="不限" autocomplete="off"></label></div><div class="quick-prices" role="group" aria-label="常用价格区间"><button type="button" data-min="" data-max="50">¥50 以下</button><button type="button" data-min="50" data-max="200">¥50–200</button><button type="button" data-min="200" data-max="500">¥200–500</button><button type="button" data-min="500" data-max="">¥500 以上</button></div><p id="price-filter-error" class="field-error" role="alert" hidden></p></div>
+          <button id="clear-search" class="market-reset" type="button">重置全部筛选</button><button id="apply-mobile-filters" class="market-filter-apply" type="button">查看商品</button>
+        </aside>
+        <div class="market-results"><div class="market-toolbar"><div class="market-result-copy"><h2>正在出售</h2><span id="result-label">正在加载商品…</span></div><div class="market-toolbar-actions"><button id="open-filters" class="market-filter-toggle" type="button" aria-controls="market-filters" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 6h18M6 12h12M9 18h6"/></svg>筛选</button><label class="market-sort-label">排序 <select id="sort-filter"><option value="NEWEST">最新发布</option><option value="PRICE_ASC">价格从低到高</option><option value="PRICE_DESC">价格从高到低</option></select></label></div></div><div id="products" class="market-grid product-grid"></div><div class="pager market-pager"><button id="prev-page" class="outline-btn" type="button">上一页</button><span id="page-label">第 1 页</span><button id="next-page" class="outline-btn" type="button">下一页</button></div></div>
       </div>
-      <div class="quick-prices" role="group" aria-label="常用价格区间"><span>常用价格</span><button type="button" data-min="" data-max="50">¥50 以下</button><button type="button" data-min="50" data-max="200">¥50–200</button><button type="button" data-min="200" data-max="500">¥200–500</button><button type="button" data-min="500" data-max="">¥500 以上</button></div>
-      <p id="price-filter-error" class="field-error" role="alert" hidden></p>
-      <div class="result-bar"><span id="result-label">正在加载商品…</span><button id="clear-search" class="text-button" type="button" hidden>清除筛选</button></div>
-      <div id="products" class="product-grid"></div>
-      <div class="pager"><button id="prev-page" class="outline-btn" type="button">上一页</button><span id="page-label">第 1 页</span><button id="next-page" class="outline-btn" type="button">下一页</button></div>
     </section>
 
     <section id="publish-view" class="page-shell inner-page" hidden>

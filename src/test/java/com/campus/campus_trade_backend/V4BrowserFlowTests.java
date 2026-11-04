@@ -53,6 +53,53 @@ class V4BrowserFlowTests {
     private BrowserContext sellerContext;
     private BrowserContext buyerContext;
 
+    @Test
+    @Timeout(45)
+    void marketplacePreviewIsSeparateFromBusinessDataAndResponsive() {
+        Page page = sellerContext.newPage();
+        AtomicInteger productApiCalls = new AtomicInteger();
+        page.onRequest(request -> {
+            if (request.url().contains("/api/products")) productApiCalls.incrementAndGet();
+        });
+        page.navigate(baseUrl() + "/?uiPreview=1", new Page.NavigateOptions().setWaitUntil(WaitUntilState.NETWORKIDLE));
+        assertThat(page.locator("#market-preview-note")).containsText("不来自业务数据库");
+        assertEquals(12, page.locator("#products .market-item").count());
+        assertEquals(0, page.locator("#products .favorite-button").count());
+        assertEquals(0, productApiCalls.get(), "本地视觉预览不得请求真实商品接口");
+
+        Path directory = Path.of("docs", "ui-screenshots", "market-reference-final");
+        try { Files.createDirectories(directory); }
+        catch (Exception error) { throw new IllegalStateException("无法创建商品广场截图目录", error); }
+        for (int[] viewport : new int[][]{{390, 844}, {768, 1024}, {1280, 800}, {1440, 900}}) {
+            page.setViewportSize(viewport[0], viewport[1]);
+            if (viewport[0] <= 900) assertThat(page.locator("#market-filters")).isHidden();
+            page.screenshot(new Page.ScreenshotOptions()
+                    .setPath(directory.resolve("preview-" + viewport[0] + ".png"))
+                    .setFullPage(true));
+            Number overflow = (Number) page.evaluate("Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - innerWidth");
+            assertTrue(overflow.doubleValue() <= 1, "预览在 " + viewport[0] + "px 横向溢出");
+            Number firstCardY = (Number) page.locator("#products .market-item").first().evaluate("node => node.getBoundingClientRect().top");
+            assertTrue(firstCardY.doubleValue() < viewport[1] * .45, "首屏应直接看到商品");
+            if (viewport[0] <= 600) {
+                Number columns = (Number) page.locator("#products").evaluate("node => getComputedStyle(node).gridTemplateColumns.split(' ').length");
+                assertEquals(2, columns.intValue(), "手机端应为双列商品");
+            }
+        }
+        page.setViewportSize(390, 844);
+        page.locator("#open-filters").click();
+        assertThat(page.locator("#market-filters")).isVisible();
+        page.locator("#category-shortcuts .category-chip").filter(new Locator.FilterOptions().setHasText("数码与电器")).click();
+        page.locator("#apply-mobile-filters").click();
+        assertEquals(4, page.locator("#products .market-item").count());
+        page.locator("#open-filters").click();
+        page.locator("#min-price-filter").fill("12.345");
+        page.locator("#apply-mobile-filters").click();
+        assertThat(page.locator("#price-filter-error")).containsText("两位小数");
+        page.locator("#min-price-filter").fill("");
+        page.locator("#close-filters").click();
+        assertEquals(0, productApiCalls.get());
+    }
+
     @BeforeEach
     void launchBrowser() {
         // 测试直接复用本机 Edge，避免 Playwright 在每台开发机首次运行时额外下载 Chromium。
@@ -425,7 +472,7 @@ class V4BrowserFlowTests {
 
     private void captureUi(Page page, String name) {
         String phase = System.getProperty("campus.ui.capture");
-        if (phase == null || !phase.matches("before|after|final|polish")) return;
+        if (phase == null || !phase.matches("before|after|final|polish|market-real")) return;
         String only = System.getProperty("campus.ui.only");
         if (only != null && !java.util.Arrays.asList(only.split(",")).contains(name)) return;
         Path directory = Path.of("docs", "ui-screenshots", phase);
@@ -447,7 +494,7 @@ class V4BrowserFlowTests {
                     Number cardAspect = (Number) page.locator("#products .product-card").first().evaluate(
                             "node => node.getBoundingClientRect().height / node.getBoundingClientRect().width");
                     assertTrue(cardAspect.doubleValue() < 2.1, "商品卡片不应被异常拉伸");
-                    assertThat(page.locator("#products .product-cover .photo-empty").first()).isVisible();
+                    assertThat(page.locator("#products .market-item-photo .photo-empty").first()).isVisible();
                 }
                 if ("profile".equals(name) && viewport[0] <= 740) {
                     Number logoutHeight = (Number) page.locator("#logout").evaluate("node => node.getBoundingClientRect().height");

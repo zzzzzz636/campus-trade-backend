@@ -1,7 +1,7 @@
 export const state = {
   token: '', user: null, view: 'home', page: 1, query: '', categoryId: '',
   minPrice: '', maxPrice: '', sort: 'NEWEST', total: 0, categories: new Map(),
-  selected: null, editingProduct: null, editReturnView: 'home', loadId: 0, pendingImages: [], favoriteIds: new Set()
+  selected: null, editingProduct: null, editReturnView: 'home', loadId: 0, pendingImages: [], favoriteIds: new Set(), isPreview: false
 };
 
 export const $ = id => document.getElementById(id);

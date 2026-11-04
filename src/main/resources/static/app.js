@@ -6,10 +6,33 @@ import { bindOrderEvents, closeOrderDetail, configureOrders, openOrderDetail, op
 import { bindMessagingEvents, closeChat, configureMessaging, openConversation } from './js/messaging.js';
 import { configureFavorites, favoriteButton, loadFavoriteIds } from './js/favorites.js';
 import { bindNotificationEvents, configureNotifications } from './js/notifications.js';
+import { createMarketCard } from './js/market-card.js';
+
+let previewItems = [];
+let previewCategories = [];
+
+function setFilterDrawer(open, restoreFocus = false) {
+  const active = open && window.matchMedia('(max-width: 900px)').matches;
+  $('market-filters').classList.toggle('open', active);
+  $('filter-backdrop').hidden = !active;
+  $('open-filters').setAttribute('aria-expanded', String(active));
+  document.body.classList.toggle('market-filters-open', active);
+  if (active) {
+    $('market-filters').setAttribute('role', 'dialog');
+    $('market-filters').setAttribute('aria-modal', 'true');
+    $('close-filters').focus();
+  } else {
+    $('market-filters').removeAttribute('role');
+    $('market-filters').removeAttribute('aria-modal');
+    if (restoreFocus) $('open-filters').focus();
+  }
+}
 
 function navigate(view) {
+  setFilterDrawer(false);
   state.view = view;
   for (const name of ['home', 'publish', 'profile']) $(`${name}-view`).hidden = name !== view;
+  $('app-view').classList.toggle('market-home-active', view === 'home');
   $('nav-home').classList.toggle('active', view === 'home');
   $('nav-publish').classList.toggle('active', view === 'publish');
   $('nav-profile').classList.toggle('active', view === 'profile');
@@ -21,7 +44,7 @@ function navigate(view) {
 }
 
 async function loadCategories() {
-  const categories = await api('/api/categories');
+  const categories = state.isPreview ? previewCategories : await api('/api/categories');
   state.categories = new Map(categories.map(category => [Number(category.id), category.name]));
   const select = $('category-select');
   select.replaceChildren();
@@ -48,6 +71,7 @@ function renderCategoryShortcuts(categories) {
     chip.type = 'button';
     chip.dataset.categoryId = String(category.id);
     chip.classList.toggle('active', String(category.id) === String(state.categoryId));
+    chip.setAttribute('aria-pressed', String(category.id) === String(state.categoryId));
     chip.addEventListener('click', () => {
       $('category-filter').value = String(category.id);
       applyProductFilters();
@@ -59,6 +83,7 @@ function renderCategoryShortcuts(categories) {
 function syncFilterShortcuts() {
   for (const chip of $('category-shortcuts').querySelectorAll('.category-chip')) {
     chip.classList.toggle('active', chip.dataset.categoryId === $('category-filter').value);
+    chip.setAttribute('aria-pressed', chip.dataset.categoryId === $('category-filter').value);
   }
   for (const chip of document.querySelectorAll('.quick-prices button')) {
     chip.classList.toggle('active', chip.dataset.min === $('min-price-filter').value.trim()
@@ -71,21 +96,6 @@ function displayCategory(item) { return item.categoryName || categoryName(item.c
 function hasProductFilters() {
   return Boolean(state.query || state.categoryId || state.minPrice || state.maxPrice || state.sort !== 'NEWEST');
 }
-function iconFor() { return '暂无照片'; }
-function cover(item) {
-  const node = el('div', '', 'product-cover');
-  if (item.coverImageUrl) {
-    const image = document.createElement('img');
-    image.src = item.coverImageUrl;
-    image.alt = item.title || '商品照片';
-    image.loading = 'lazy';
-    image.decoding = 'async';
-    image.addEventListener('error', () => node.replaceChildren(emptyPhoto()), { once: true });
-    node.append(image);
-  } else node.append(emptyPhoto());
-  return node;
-}
-
 function renderProducts(items) {
   const host = $('products');
   host.replaceChildren();
@@ -101,32 +111,39 @@ function renderProducts(items) {
     host.append(empty);
   } else {
     for (const item of items) {
-      const card = el('article', '', 'product-card');
-      const open = el('button', '', 'product-open');
-      open.type = 'button';
-      open.setAttribute('aria-label', `查看${item.title}，${money(item.price)}`);
-      const cardCover = cover(item);
-      const body = el('div', '', 'product-body');
-      body.append(el('div', money(item.price), 'price'), el('h3', item.title));
-      const meta = el('div', '', 'product-meta');
-      meta.append(el('span', displayCategory(item)), el('span', conditionName[item.condition] || item.condition));
-      body.append(meta, el('p', item.sellerNickname || '校园同学', 'product-seller'));
-      open.append(cardCover, body);
-      card.append(open, favoriteButton(item.id, true));
-      open.addEventListener('click', () => openDetail(item.id));
-      host.append(card);
+      host.append(createMarketCard(item, {
+        preview: Boolean(state.isPreview), favoriteButton,
+        onOpen: () => state.isPreview
+          ? toast('这是本地设计预览；请返回真实平台浏览和交易。')
+          : openDetail(item.id)
+      }));
     }
   }
-  $('result-label').textContent = hasProductFilters() ? `符合当前条件的商品 · ${state.total} 件` : `全部在售商品 · ${state.total} 件`;
-  $('clear-search').hidden = !hasProductFilters();
+  $('result-label').textContent = state.isPreview
+    ? `本地示例 · ${state.total} 件`
+    : hasProductFilters() ? `${state.total} 件符合条件` : `${state.total} 件在售`;
+  $('clear-search').disabled = !hasProductFilters();
   $('page-label').textContent = `第 ${state.page} 页`;
   $('prev-page').disabled = state.page <= 1;
   $('next-page').disabled = state.page * 12 >= state.total;
-  document.querySelector('.pager').hidden = state.total <= 12;
+  document.querySelector('.market-pager').hidden = state.total <= 12;
   syncFilterShortcuts();
 }
 
 async function loadProducts() {
+  if (state.isPreview) {
+    const query = state.query.toLocaleLowerCase('zh-CN');
+    const matches = previewItems.filter(item =>
+      (!query || `${item.title} ${item.categoryName}`.toLocaleLowerCase('zh-CN').includes(query))
+      && (!state.categoryId || String(item.categoryId) === String(state.categoryId))
+      && (!state.minPrice || item.price >= Number(state.minPrice))
+      && (!state.maxPrice || item.price <= Number(state.maxPrice)));
+    matches.sort((a, b) => state.sort === 'PRICE_ASC' ? a.price - b.price
+      : state.sort === 'PRICE_DESC' ? b.price - a.price : a.previewTile - b.previewTile);
+    state.total = matches.length;
+    renderProducts(matches.slice((state.page - 1) * 12, state.page * 12));
+    return;
+  }
   const id = ++state.loadId;
   const params = new URLSearchParams({ page: state.page, size: 12, q: state.query, sort: state.sort });
   if (state.categoryId) params.set('categoryId', state.categoryId);
@@ -361,6 +378,16 @@ function startEdit(product) {
 }
 
 $('brand-home').addEventListener('click', () => navigate('home'));
+$('open-filters').addEventListener('click', () => setFilterDrawer(true));
+$('close-filters').addEventListener('click', () => setFilterDrawer(false, true));
+$('filter-backdrop').addEventListener('click', () => setFilterDrawer(false, true));
+$('apply-mobile-filters').addEventListener('click', () => {
+  if (applyProductFilters()) setFilterDrawer(false, true);
+});
+window.matchMedia('(max-width: 900px)').addEventListener('change', () => setFilterDrawer(false));
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && $('market-filters').classList.contains('open')) setFilterDrawer(false, true);
+});
 $('nav-home').addEventListener('click', () => navigate('home'));
 $('nav-publish').addEventListener('click', startCreate);
 $('home-publish').addEventListener('click', startCreate);
@@ -417,7 +444,7 @@ function applyProductFilters() {
   else if (min && max && Number(min) > Number(max)) problem = '最低价不能高于最高价。';
   $('price-filter-error').textContent = problem;
   $('price-filter-error').hidden = !problem;
-  if (problem) return;
+  if (problem) return false;
   state.query = $('search-input').value.trim();
   state.categoryId = $('category-filter').value;
   state.minPrice = min;
@@ -426,6 +453,7 @@ function applyProductFilters() {
   state.page = 1;
   syncFilterShortcuts();
   loadProducts().catch(error => toast(`筛选失败：${error.message}`, true));
+  return true;
 }
 $('prev-page').addEventListener('click', () => { if (state.page > 1) { state.page--; loadProducts().catch(error => toast(error.message, true)); } });
 $('next-page').addEventListener('click', () => { if (state.page * 12 < state.total) { state.page++; loadProducts().catch(error => toast(error.message, true)); } });
@@ -600,7 +628,7 @@ configureAuth({
     $('publish-form').reset();
   }
 });
-configureProfile({ navigate, openDetail, startEdit, takeDown, loadProducts, iconFor, displayCategory });
+configureProfile({ navigate, openDetail, startEdit, takeDown, loadProducts, displayCategory });
 configureOrders({
   refresh: async () => {
     await loadProducts();
@@ -620,4 +648,19 @@ bindProfileEvents();
 bindOrderEvents();
 bindMessagingEvents();
 bindNotificationEvents();
-restoreSession();
+async function initPreview() {
+  ({ previewItems, previewCategories } = await import('./js/market-preview-data.js'));
+  state.isPreview = true;
+  $('auth-view').hidden = true;
+  $('app-view').hidden = false;
+  $('app-view').classList.add('preview-mode');
+  $('market-preview-note').hidden = false;
+  navigate('home');
+  await loadCategories();
+  await loadProducts();
+}
+
+const localPreview = new URLSearchParams(location.search).get('uiPreview') === '1'
+  && ['localhost', '127.0.0.1'].includes(location.hostname);
+if (localPreview) initPreview().catch(error => toast(`本地预览加载失败：${error.message}`, true));
+else restoreSession();
