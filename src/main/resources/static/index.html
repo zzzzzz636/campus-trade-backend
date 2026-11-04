@@ -73,19 +73,22 @@
     </header>
 
     <section id="home-view" class="page-shell">
-      <div class="hero">
-        <div class="hero-copy"><span class="eyebrow light">CAMPUS MARKETPLACE</span><h1>在校园，发现<br><em>刚刚好的好物。</em></h1><p>从一页教材到一盏台灯，让每件闲置都找到新故事。</p></div>
-        <div class="hero-art" aria-hidden="true"><span class="art-book">📚</span><span class="art-lamp">💡</span><span class="art-bag">🎒</span></div>
-      </div>
+      <section class="hero" aria-labelledby="home-hero-title">
+        <div class="hero-copy"><span class="eyebrow">校园闲置 · 重新流转</span><h1 id="home-hero-title">你闲置的，<br><em>正是别人需要的。</em></h1><p>在熟悉的校园里，找到价格合适、方便见面的好物。</p></div>
+        <div class="hero-action"><span>从分享一件闲置开始</span><button id="home-publish" class="primary" type="button">发布闲置 <span aria-hidden="true">↗</span></button></div>
+      </section>
 
-      <div class="section-heading"><div><span class="eyebrow">EXPLORE</span><h2>逛逛同学们的闲置</h2><p>不同发布者的商品都在这里，按最新发布排序。</p></div><button id="home-publish" class="outline-btn" type="button">＋ 发布我的闲置</button></div>
-      <form id="search-form" class="search-form" role="search"><span class="search-icon" aria-hidden="true">⌕</span><input id="search-input" name="q" type="search" maxlength="100" placeholder="搜索教材、数码、生活用品…" aria-label="搜索商品"><button class="primary" type="submit">搜索商品</button></form>
+      <div class="section-heading"><div><span class="eyebrow">正在流转</span><h2>发现校园好物</h2></div><p>真实发布，按你的条件慢慢挑。</p></div>
+      <form id="search-form" class="search-form" role="search"><svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg><input id="search-input" name="q" type="search" maxlength="100" placeholder="搜教材、数码、宿舍好物…" aria-label="搜索商品"><button class="primary" type="submit">搜索</button></form>
+      <div id="category-shortcuts" class="category-shortcuts" aria-label="快速选择分类"></div>
       <div class="filter-bar" aria-label="商品筛选与排序">
         <label>分类<select id="category-filter"><option value="">全部分类</option></select></label>
-        <label>最低价<input id="min-price-filter" type="number" min="0" max="99999999.99" step="0.01" placeholder="不限"></label>
-        <label>最高价<input id="max-price-filter" type="number" min="0" max="99999999.99" step="0.01" placeholder="不限"></label>
+        <label>最低价<input id="min-price-filter" type="text" inputmode="decimal" maxlength="11" placeholder="¥ 不限" autocomplete="off"></label>
+        <label>最高价<input id="max-price-filter" type="text" inputmode="decimal" maxlength="11" placeholder="¥ 不限" autocomplete="off"></label>
         <label>排序<select id="sort-filter"><option value="NEWEST">最新发布</option><option value="PRICE_ASC">价格从低到高</option><option value="PRICE_DESC">价格从高到低</option></select></label>
       </div>
+      <div class="quick-prices" role="group" aria-label="常用价格区间"><span>常用价格</span><button type="button" data-min="" data-max="50">¥50 以下</button><button type="button" data-min="50" data-max="200">¥50–200</button><button type="button" data-min="200" data-max="500">¥200–500</button><button type="button" data-min="500" data-max="">¥500 以上</button></div>
+      <p id="price-filter-error" class="field-error" role="alert" hidden></p>
       <div class="result-bar"><span id="result-label">正在加载商品…</span><button id="clear-search" class="text-button" type="button" hidden>清除筛选</button></div>
       <div id="products" class="product-grid"></div>
       <div class="pager"><button id="prev-page" class="outline-btn" type="button">上一页</button><span id="page-label">第 1 页</span><button id="next-page" class="outline-btn" type="button">下一页</button></div>
@@ -130,7 +133,7 @@
       </div>
     </section>
 
-    <footer class="site-footer">CampusTrade · 让校园闲置流转起来 <span>V5 购买申请 · 面交与快递履约</span></footer>
+    <footer class="site-footer"><span>CampusTrade · 让校园闲置找到下一位主人</span><span>校内沟通，安心交易</span></footer>
   </div>
 
   <div id="detail-overlay" class="overlay" hidden>

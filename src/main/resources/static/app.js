@@ -1,4 +1,4 @@
-import { $, conditionName, dateTime, el, money, state, toast } from './js/core.js';
+import { $, conditionName, dateTime, el, emptyPhoto, money, state, toast } from './js/core.js';
 import { api, configureApi } from './js/api.js';
 import { bindAuthEvents, configureAuth, logout, restoreSession } from './js/auth.js';
 import { bindProfileEvents, configureProfile, loadProfile, profileTab } from './js/profile.js';
@@ -37,6 +37,33 @@ async function loadCategories() {
     filter.append(filterOption);
   }
   filter.value = state.categoryId;
+  renderCategoryShortcuts(categories);
+}
+
+function renderCategoryShortcuts(categories) {
+  const host = $('category-shortcuts');
+  host.replaceChildren();
+  for (const category of [{ id: '', name: '全部' }, ...categories]) {
+    const chip = el('button', category.name, 'category-chip');
+    chip.type = 'button';
+    chip.dataset.categoryId = String(category.id);
+    chip.classList.toggle('active', String(category.id) === String(state.categoryId));
+    chip.addEventListener('click', () => {
+      $('category-filter').value = String(category.id);
+      applyProductFilters();
+    });
+    host.append(chip);
+  }
+}
+
+function syncFilterShortcuts() {
+  for (const chip of $('category-shortcuts').querySelectorAll('.category-chip')) {
+    chip.classList.toggle('active', chip.dataset.categoryId === $('category-filter').value);
+  }
+  for (const chip of document.querySelectorAll('.quick-prices button')) {
+    chip.classList.toggle('active', chip.dataset.min === $('min-price-filter').value.trim()
+      && chip.dataset.max === $('max-price-filter').value.trim());
+  }
 }
 
 function categoryName(id) { return state.categories.get(Number(id)) || '校园好物'; }
@@ -44,72 +71,48 @@ function displayCategory(item) { return item.categoryName || categoryName(item.c
 function hasProductFilters() {
   return Boolean(state.query || state.categoryId || state.minPrice || state.maxPrice || state.sort !== 'NEWEST');
 }
-function iconFor(item) {
-  const text = `${displayCategory(item)} ${item.title}`;
-  if (/书|教材|笔记|资料/.test(text)) return '📚';
-  if (/灯/.test(text)) return '💡';
-  if (/耳机|音箱|数码|手机|电脑|电器/.test(text)) return '🎧';
-  if (/包|衣|鞋/.test(text)) return '🎒';
-  return '🛍️';
-}
-function cover(item, index) {
-  const node = el('div', '', `product-cover cover-${index % 4}`);
+function iconFor() { return '暂无照片'; }
+function cover(item) {
+  const node = el('div', '', 'product-cover');
   if (item.coverImageUrl) {
     const image = document.createElement('img');
     image.src = item.coverImageUrl;
     image.alt = item.title || '商品照片';
     image.loading = 'lazy';
+    image.decoding = 'async';
     node.append(image);
-  } else {
-    node.textContent = iconFor(item);
-  }
+  } else node.append(emptyPhoto());
   return node;
-}
-
-function sampleCards() {
-  const samples = [
-    { title: '闲置教材示例', categoryId: 1, sellerNickname: '示例发布者 A' },
-    { title: '桌面台灯示例', categoryId: 2, sellerNickname: '示例发布者 B' },
-    { title: '校园生活好物示例', categoryId: 0, sellerNickname: '示例发布者 C' }
-  ];
-  for (const [index, item] of samples.entries()) {
-    const card = el('article', '', 'product-card sample');
-    const image = cover(item, index);
-    image.append(el('span', '示意卡片', 'sample-badge'));
-    const body = el('div', '', 'product-body');
-    body.append(el('span', displayCategory(item), 'tag'), el('h3', item.title), el('div', '等待真实商品发布', 'subtle'));
-    const meta = el('div', '', 'product-meta');
-    meta.append(el('span', `发布者 · ${item.sellerNickname}`));
-    body.append(meta);
-    card.append(image, body);
-    $('products').append(card);
-  }
 }
 
 function renderProducts(items) {
   const host = $('products');
   host.replaceChildren();
-  if (!items.length && state.total === 0 && !hasProductFilters()) {
-    sampleCards();
-  } else if (!items.length) {
-    const empty = el('div', '', 'empty-state');
-    empty.append(el('div', '🔎', 'empty-icon'), el('strong', '没有找到相关商品'), el('span', '试试其他关键词，或者清除搜索条件。'));
+  if (!items.length) {
+    const filtered = hasProductFilters();
+    const empty = el('div', '', 'empty-state marketplace-empty');
+    empty.append(emptyPhoto(), el('strong', filtered ? '没有找到符合条件的商品' : '这里还没有在售商品'),
+      el('span', filtered ? '调整关键词或价格区间，再试一次。' : '成为第一个分享闲置的同学。'));
+    const action = el('button', filtered ? '清除筛选' : '发布闲置', 'outline-btn');
+    action.type = 'button';
+    action.addEventListener('click', () => filtered ? $('clear-search').click() : startCreate());
+    empty.append(action);
     host.append(empty);
   } else {
-    for (const [index, item] of items.entries()) {
+    for (const item of items) {
       const card = el('article', '', 'product-card');
-      card.tabIndex = 0;
-      card.setAttribute('role', 'button');
+      const open = el('button', '', 'product-open');
+      open.type = 'button';
+      open.setAttribute('aria-label', `查看${item.title}，${money(item.price)}`);
+      const cardCover = cover(item);
       const body = el('div', '', 'product-body');
-      body.append(el('span', displayCategory(item), 'tag'), el('h3', item.title), el('div', money(item.price), 'price'));
+      body.append(el('div', money(item.price), 'price'), el('h3', item.title));
       const meta = el('div', '', 'product-meta');
-      meta.append(el('span', `发布者 · ${item.sellerNickname || '校园同学'}`), el('span', conditionName[item.condition] || item.condition));
-      body.append(meta, el('time', item.createdAt ? `发布于 ${dateTime(item.createdAt)}` : '', 'product-time'));
-      const cardCover = cover(item, index);
-      cardCover.append(favoriteButton(item.id, true));
-      card.append(cardCover, body);
-      card.addEventListener('click', () => openDetail(item.id));
-      card.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') openDetail(item.id); });
+      meta.append(el('span', displayCategory(item)), el('span', conditionName[item.condition] || item.condition));
+      body.append(meta, el('p', item.sellerNickname || '校园同学', 'product-seller'));
+      open.append(cardCover, body);
+      card.append(open, favoriteButton(item.id, true));
+      open.addEventListener('click', () => openDetail(item.id));
       host.append(card);
     }
   }
@@ -119,6 +122,7 @@ function renderProducts(items) {
   $('prev-page').disabled = state.page <= 1;
   $('next-page').disabled = state.page * 12 >= state.total;
   document.querySelector('.pager').hidden = state.total <= 12;
+  syncFilterShortcuts();
 }
 
 async function loadProducts() {
@@ -127,14 +131,40 @@ async function loadProducts() {
   if (state.categoryId) params.set('categoryId', state.categoryId);
   if (state.minPrice) params.set('minPrice', state.minPrice);
   if (state.maxPrice) params.set('maxPrice', state.maxPrice);
-  const [result] = await Promise.all([api(`/api/products?${params}`), loadFavoriteIds()]);
-  if (id !== state.loadId) return;
-  if (result.total > 0 && result.items.length === 0 && state.page > 1) {
-    state.page = Math.ceil(result.total / 12);
-    return loadProducts();
+  const loadingTimer = window.setTimeout(() => {
+    if (id !== state.loadId) return;
+    const host = $('products');
+    host.setAttribute('aria-busy', 'true');
+    host.replaceChildren(...Array.from({ length: 8 }, () => {
+      const skeleton = el('div', '', 'product-skeleton');
+      skeleton.setAttribute('aria-hidden', 'true');
+      return skeleton;
+    }));
+  }, 180);
+  try {
+    const [result] = await Promise.all([api(`/api/products?${params}`), loadFavoriteIds()]);
+    if (id !== state.loadId) return;
+    if (result.total > 0 && result.items.length === 0 && state.page > 1) {
+      state.page = Math.ceil(result.total / 12);
+      return loadProducts();
+    }
+    state.total = result.total;
+    renderProducts(result.items);
+  } catch (error) {
+    if (id === state.loadId && state.token) {
+      $('result-label').textContent = '商品加载遇到问题';
+      const retry = el('button', '重试加载', 'outline-btn');
+      retry.type = 'button';
+      retry.addEventListener('click', () => loadProducts().catch(next => toast(next.message, true)));
+      const empty = el('div', '', 'empty-state marketplace-empty');
+      empty.append(el('strong', '商品暂时无法显示'), el('span', '请检查网络连接后重试。'), retry);
+      $('products').replaceChildren(empty);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(loadingTimer);
+    if (id === state.loadId) $('products').setAttribute('aria-busy', 'false');
   }
-  state.total = result.total;
-  renderProducts(result.items);
 }
 
 function closeDetail() { $('detail-overlay').hidden = true; state.selected = null; }
@@ -345,18 +375,19 @@ document.addEventListener('keydown', event => {
 });
 $('search-form').addEventListener('submit', event => {
   event.preventDefault();
-  state.query = $('search-input').value.trim();
-  state.categoryId = $('category-filter').value;
-  state.minPrice = $('min-price-filter').value;
-  state.maxPrice = $('max-price-filter').value;
-  state.sort = $('sort-filter').value;
-  state.page = 1;
-  loadProducts().catch(error => toast(`搜索失败：${error.message}`, true));
+  applyProductFilters();
 });
 $('category-filter').addEventListener('change', applyProductFilters);
 $('min-price-filter').addEventListener('change', applyProductFilters);
 $('max-price-filter').addEventListener('change', applyProductFilters);
 $('sort-filter').addEventListener('change', applyProductFilters);
+for (const chip of document.querySelectorAll('.quick-prices button')) {
+  chip.addEventListener('click', () => {
+    $('min-price-filter').value = chip.dataset.min;
+    $('max-price-filter').value = chip.dataset.max;
+    applyProductFilters();
+  });
+}
 $('clear-search').addEventListener('click', () => {
   $('search-input').value = '';
   $('category-filter').value = '';
@@ -369,16 +400,28 @@ $('clear-search').addEventListener('click', () => {
   state.maxPrice = '';
   state.sort = 'NEWEST';
   state.page = 1;
+  $('price-filter-error').hidden = true;
+  syncFilterShortcuts();
   loadProducts().catch(error => toast(`加载失败：${error.message}`, true));
 });
 
 function applyProductFilters() {
+  const min = $('min-price-filter').value.trim();
+  const max = $('max-price-filter').value.trim();
+  const validMoney = value => !value || /^(?:0|[1-9]\d{0,7})(?:\.\d{1,2})?$/.test(value);
+  let problem = '';
+  if (!validMoney(min) || !validMoney(max)) problem = '请输入不超过两位小数的价格。';
+  else if (min && max && Number(min) > Number(max)) problem = '最低价不能高于最高价。';
+  $('price-filter-error').textContent = problem;
+  $('price-filter-error').hidden = !problem;
+  if (problem) return;
   state.query = $('search-input').value.trim();
   state.categoryId = $('category-filter').value;
-  state.minPrice = $('min-price-filter').value;
-  state.maxPrice = $('max-price-filter').value;
+  state.minPrice = min;
+  state.maxPrice = max;
   state.sort = $('sort-filter').value;
   state.page = 1;
+  syncFilterShortcuts();
   loadProducts().catch(error => toast(`筛选失败：${error.message}`, true));
 }
 $('prev-page').addEventListener('click', () => { if (state.page > 1) { state.page--; loadProducts().catch(error => toast(error.message, true)); } });

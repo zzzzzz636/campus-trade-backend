@@ -26,6 +26,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.util.Map;
 import java.nio.file.Path;
+import java.nio.file.Files;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -83,8 +84,12 @@ class V4BrowserFlowTests {
         Page seller = sellerContext.newPage();
         Page buyer = buyerContext.newPage();
 
+        seller.navigate(baseUrl(), new Page.NavigateOptions().setWaitUntil(WaitUntilState.NETWORKIDLE));
+        captureUi(seller, "auth");
+
         register(seller, "seller-" + marker + "@example.invalid", "浏览器卖家 A");
         long productId = publish(seller, title);
+        captureUi(seller, "plaza");
 
         seller.locator("#products .product-card").filter(new Locator.FilterOptions().setHasText(title)).click();
         assertThat(seller.getByRole(AriaRole.BUTTON,
@@ -99,6 +104,7 @@ class V4BrowserFlowTests {
         assertThat(seller.locator("#publish-back")).hasText("← 返回我的发布");
         seller.locator("#publish-back").click();
         assertThat(seller.locator("#listings-pane")).isVisible();
+        captureUi(seller, "profile");
 
         seller.reload();
         assertThat(seller.locator("#app-view")).isVisible();
@@ -107,6 +113,7 @@ class V4BrowserFlowTests {
 
         register(buyer, "buyer-" + marker + "@example.invalid", "浏览器买家 B");
         searchAndOpen(buyer, title);
+        captureUi(buyer, "detail");
         assertThat(buyer.getByRole(AriaRole.BUTTON,
                 new Page.GetByRoleOptions().setName("提交购买申请"))).isVisible();
         assertThat(buyer.getByRole(AriaRole.BUTTON,
@@ -129,6 +136,7 @@ class V4BrowserFlowTests {
         assertThat(buyer.locator("#chat-overlay")).isVisible();
         assertThat(buyer.locator("#chat-title")).hasText("浏览器卖家 A");
         assertThat(buyer.locator("#chat-context-title")).hasText(title);
+        captureUi(buyer, "chat");
         Locator buyerComposer = buyer.locator("#message-content");
         buyerComposer.dispatchEvent("compositionstart");
         buyerComposer.fill("中文输入组合中");
@@ -248,6 +256,7 @@ class V4BrowserFlowTests {
         long orderId = objectMapper.readTree(createOrder.text()).path("id").asLong();
         assertThat(buyer.locator("#order-overlay")).isVisible();
         assertThat(buyer.locator("#order-detail-content")).containsText("等待卖家确认");
+        captureUi(buyer, "order");
         buyer.locator("#close-order-detail").click();
 
         buyer.locator("#nav-profile").click();
@@ -384,6 +393,7 @@ class V4BrowserFlowTests {
         page.locator("#publish-form [name=title]").fill(title);
         page.locator("#publish-form [name=description]").fill("浏览器自动化发布，校内线下面交。");
         page.locator("#publish-form [name=price]").fill("22.50");
+        captureUi(page, "publish");
         Response created = page.waitForResponse(response ->
                         response.url().endsWith("/api/products") && response.request().method().equals("POST"),
                 () -> page.locator("#publish-submit").click());
@@ -392,6 +402,31 @@ class V4BrowserFlowTests {
         assertThat(page.locator("#home-view")).isVisible();
         assertThat(page.locator("#products")).containsText(title);
         return productId;
+    }
+
+    private void captureUi(Page page, String name) {
+        String phase = System.getProperty("campus.ui.capture");
+        if (phase == null || !phase.matches("before|after")) return;
+        String only = System.getProperty("campus.ui.only");
+        if (only != null && !only.equals(name)) return;
+        Path directory = Path.of("docs", "ui-screenshots", phase);
+        try { Files.createDirectories(directory); }
+        catch (Exception error) { throw new IllegalStateException("无法创建 UI 截图目录", error); }
+        int[][] viewports = "before".equals(phase)
+                ? new int[][]{{390, 844}, {1280, 800}}
+                : new int[][]{{390, 844}, {768, 1024}, {1280, 800}, {1440, 900}};
+        for (int[] viewport : viewports) {
+            page.setViewportSize(viewport[0], viewport[1]);
+            if ("after".equals(phase)) page.locator("#toast").evaluate("node => node.hidden = true");
+            page.screenshot(new Page.ScreenshotOptions()
+                    .setPath(directory.resolve(name + "-" + viewport[0] + ".png"))
+                    .setFullPage(!"chat".equals(name) && !"detail".equals(name) && !"order".equals(name)));
+            if ("after".equals(phase)) {
+                Number overflow = (Number) page.evaluate("Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - window.innerWidth");
+                assertTrue(overflow.doubleValue() <= 1, name + " 在 " + viewport[0] + "px 有横向溢出 " + overflow);
+            }
+        }
+        page.setViewportSize(1280, 800);
     }
 
     private void searchAndOpen(Page page, String title) {

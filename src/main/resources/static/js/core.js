@@ -34,3 +34,16 @@ export function el(tag, text, className = '') {
   if (className) node.className = className;
   return node;
 }
+
+export function emptyPhoto() {
+  const host = el('div', '', 'photo-empty');
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 64 64');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.innerHTML = '<rect x="9" y="12" width="46" height="40" rx="5"/><circle cx="24" cy="25" r="4"/><path d="m13 46 14-13 8 7 8-9 8 9"/>';
+  host.append(svg, el('span', '暂无照片'));
+  return host;
+}
