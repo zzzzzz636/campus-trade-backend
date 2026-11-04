@@ -90,6 +90,15 @@ class V4BrowserFlowTests {
         register(seller, "seller-" + marker + "@example.invalid", "浏览器卖家 A");
         long productId = publish(seller, title);
         captureUi(seller, "plaza");
+        assertEquals(0, seller.locator("#products .sample").count(), "商品广场不应混入演示卡片");
+        seller.locator(".quick-prices button[data-max='50']").click();
+        assertThat(seller.locator("#products .product-card").filter(new Locator.FilterOptions().setHasText(title))).isVisible();
+        seller.locator("#clear-search").click();
+        seller.locator("#search-input").fill("不存在的商品-" + marker);
+        seller.locator("#search-form button[type=submit]").click();
+        assertThat(seller.locator("#products .marketplace-empty")).containsText("没有找到符合条件的商品");
+        assertEquals(0, seller.locator("#products .product-card").count());
+        seller.locator("#clear-search").click();
 
         seller.locator("#products .product-card").filter(new Locator.FilterOptions().setHasText(title)).click();
         assertThat(seller.getByRole(AriaRole.BUTTON,
@@ -180,6 +189,7 @@ class V4BrowserFlowTests {
                 });
         assertEquals(201, reply.status());
         assertThat(buyer.locator("#chat-messages")).containsText("可以，下午三点见。");
+        captureUi(buyer, "chat-filled");
         seller.locator("#close-chat").click();
 
         String conversationListPattern = "**/api/conversations?page=1&size=50";
@@ -262,20 +272,24 @@ class V4BrowserFlowTests {
         buyer.locator("#nav-profile").click();
         assertThat(buyer.locator("#purchases-pane").getByText(title)).isVisible();
         assertThat(buyer.locator("#purchases-pane").getByText("订单 #" + orderId, new Locator.GetByTextOptions().setExact(false))).isVisible();
+        captureUi(buyer, "purchases");
 
         seller.reload();
         assertThat(seller.locator("#app-view")).isVisible();
         seller.locator("#nav-profile").click();
         seller.locator("#tab-notifications").click();
         assertThat(seller.locator("#notification-count")).hasText("1");
+        captureUi(seller, "notifications");
         seller.locator("#notifications-pane .notification-row").first().click();
         assertThat(seller.locator("#order-overlay")).isVisible();
         assertThat(seller.locator("#notification-count")).hasText("0");
         seller.locator("#close-order-detail").click();
         seller.locator("#tab-sales").click();
         assertThat(seller.locator("#sales-pane").getByText(title)).isVisible();
+        captureUi(seller, "sales");
         seller.locator("#tab-messages").click();
         assertThat(seller.locator("#messages-pane")).containsText("历史消息 32");
+        captureUi(seller, "messages");
         seller.locator("#tab-sales").click();
         seller.locator("#sales-pane .order-row").filter(new Locator.FilterOptions().setHasText(title)).click();
         assertThat(seller.locator("#order-detail-content")).containsText("等待卖家确认");
@@ -299,6 +313,7 @@ class V4BrowserFlowTests {
         buyer.locator("#close-order-detail").click();
         buyer.locator("#tab-favorites").click();
         assertThat(buyer.locator("#favorites-pane").filter(new Locator.FilterOptions().setHasText(title))).containsText("已售出");
+        captureUi(buyer, "favorites");
 
         seller.reload();
         seller.locator("#nav-profile").click();
@@ -394,6 +409,10 @@ class V4BrowserFlowTests {
         page.locator("#publish-form [name=description]").fill("浏览器自动化发布，校内线下面交。");
         page.locator("#publish-form [name=price]").fill("22.50");
         captureUi(page, "publish");
+        page.locator("#publish-preview").click();
+        assertThat(page.locator("#publish-preview-content")).containsText(title);
+        assertThat(page.locator("#publish-preview-content")).containsText("¥22.50");
+        page.locator("#close-publish-preview").click();
         Response created = page.waitForResponse(response ->
                         response.url().endsWith("/api/products") && response.request().method().equals("POST"),
                 () -> page.locator("#publish-submit").click());
@@ -406,7 +425,7 @@ class V4BrowserFlowTests {
 
     private void captureUi(Page page, String name) {
         String phase = System.getProperty("campus.ui.capture");
-        if (phase == null || !phase.matches("before|after")) return;
+        if (phase == null || !phase.matches("before|after|final")) return;
         String only = System.getProperty("campus.ui.only");
         if (only != null && !java.util.Arrays.asList(only.split(",")).contains(name)) return;
         Path directory = Path.of("docs", "ui-screenshots", phase);
@@ -417,13 +436,27 @@ class V4BrowserFlowTests {
                 : new int[][]{{390, 844}, {768, 1024}, {1280, 800}, {1440, 900}};
         for (int[] viewport : viewports) {
             page.setViewportSize(viewport[0], viewport[1]);
-            if ("after".equals(phase)) page.locator("#toast").evaluate("node => node.hidden = true");
+            if (!"before".equals(phase)) page.locator("#toast").evaluate("node => node.hidden = true");
             page.screenshot(new Page.ScreenshotOptions()
                     .setPath(directory.resolve(name + "-" + viewport[0] + ".png"))
-                    .setFullPage(!"chat".equals(name) && !"detail".equals(name) && !"order".equals(name)));
-            if ("after".equals(phase)) {
+                    .setFullPage(!name.startsWith("chat") && !"detail".equals(name) && !"order".equals(name)));
+            if (!"before".equals(phase)) {
                 Number overflow = (Number) page.evaluate("Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - window.innerWidth");
                 assertTrue(overflow.doubleValue() <= 1, name + " 在 " + viewport[0] + "px 有横向溢出 " + overflow);
+                if ("plaza".equals(name)) {
+                    Number cardAspect = (Number) page.locator("#products .product-card").first().evaluate(
+                            "node => node.getBoundingClientRect().height / node.getBoundingClientRect().width");
+                    assertTrue(cardAspect.doubleValue() < 2.1, "商品卡片不应被异常拉伸");
+                    assertThat(page.locator("#products .product-cover .photo-empty").first()).isVisible();
+                }
+                if (name.startsWith("chat")) {
+                    Number messagesHeight = (Number) page.locator("#chat-messages").evaluate("node => node.getBoundingClientRect().height");
+                    Number composerHeight = (Number) page.locator("#message-form").evaluate("node => node.getBoundingClientRect().height");
+                    Number sendWidth = (Number) page.locator("#send-message").evaluate("node => node.getBoundingClientRect().width");
+                    assertTrue(messagesHeight.doubleValue() > viewport[1] * .35, "私信消息区域高度不足");
+                    assertTrue(composerHeight.doubleValue() < viewport[1] * .3, "私信输入区异常拉伸");
+                    assertTrue(sendWidth.doubleValue() < 140, "私信发送按钮异常拉伸");
+                }
             }
         }
         page.setViewportSize(1280, 800);

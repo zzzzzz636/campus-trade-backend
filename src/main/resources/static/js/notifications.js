@@ -1,4 +1,4 @@
-import { $, dateTime, el, state, toast } from './core.js';
+import { $, dateTime, el, emptyPhoto, state, toast } from './core.js';
 import { api } from './api.js';
 
 let page = 1;
@@ -16,7 +16,11 @@ export async function loadNotifications() {
   const result = await api(`/api/notifications?page=${page}&size=20`);
   const host = $('notifications-pane');
   host.replaceChildren();
-  if (!result.items.length) host.append(el('div', '暂无通知', 'empty-state'));
+  if (!result.items.length) {
+    const empty = el('div', '', 'empty-state');
+    empty.append(emptyPhoto(), el('strong', '暂时没有通知'), el('span', '订单有新进展时会显示在这里。'));
+    host.append(empty);
+  }
   for (const item of result.items) {
     const row = el('button', '', `notification-row ${item.readAt ? '' : 'unread'}`);
     row.type = 'button';

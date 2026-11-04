@@ -408,3 +408,85 @@ button { touch-action: manipulation; }
   .order-detail-actions { grid-template-columns: 1fr; }
   .order-progress small { font-size: 10px; }
 }
+
+/* Authentication is part of the same product, with a branded but quiet entry. */
+.auth-layout { grid-template-columns: minmax(0,1fr) minmax(0,1fr); background: var(--color-surface); }
+.auth-intro { min-width: 0; padding: 42px clamp(36px,7vw,110px); background: #eaf2e9; }
+.auth-intro:before, .auth-intro:after { content: none; }
+.auth-copy { margin: auto 0; }
+.auth-copy h1 { color: var(--color-text); font-size: clamp(38px,4vw,60px); }
+.auth-copy h1 span { color: var(--color-brand); }
+.auth-copy p { color: var(--color-muted); }
+.auth-steps { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 42px; color: var(--color-brand); font-size: 13px; font-weight: 700; }
+.auth-steps span { padding: 9px 11px; border: 1px solid #cadfcd; border-radius: 999px; background: #f8fbf7; }
+.auth-steps i { width: 18px; height: 1px; background: #96b79d; }
+.auth-foot { color: var(--color-muted); }
+.auth-form-wrap { min-width: 0; padding: 42px; }
+.auth-box { width: min(100%,430px); }
+.auth-box h2 { color: var(--color-text); }
+.auth-tabs { border-color: var(--color-border); }
+.auth-tab { color: var(--color-muted); }
+.auth-tab.active { border-color: var(--color-brand); color: var(--color-brand); }
+.auth-tip { color: var(--ct-ink-400); }
+.verification-row { min-width: 0; }
+.verification-row input { min-width: 0; }
+@media (max-width: 900px) {
+  .auth-layout { grid-template-columns: minmax(0,1fr); }
+  .auth-intro { min-height: 260px; padding: 25px 32px; }
+  .auth-copy { max-width: 620px; margin: 24px 0 0; }
+  .auth-copy h1 { margin: 8px 0 10px; font-size: 34px; }
+  .auth-copy p { margin: 0; }
+  .auth-steps { margin-top: 18px; }
+  .auth-foot { display: none; }
+  .auth-form-wrap { padding: 40px 24px 70px; }
+}
+@media (max-width: 740px) {
+  .auth-intro { min-height: 0; padding: 21px 22px 28px; }
+  .auth-copy { margin: 23px 0 0; }
+  .auth-copy h1 { font-size: 31px; }
+  .auth-copy p { display: block; font-size: 13px; }
+  .auth-steps { margin-top: 17px; gap: 5px; font-size: 11px; }
+  .auth-steps span { padding: 6px 8px; }
+  .auth-steps i { width: 9px; }
+  .auth-form-wrap { padding: 29px 22px 60px; }
+  .auth-box h2 { font-size: 29px; }
+}
+
+/* Notifications and conversations share the account list rhythm. */
+.notification-row { position: relative; gap: 16px; padding: 19px 12px 19px 25px; border: 0; border-bottom: 1px solid var(--color-border); border-radius: 0; background: transparent; color: var(--color-text); }
+.notification-row:before { content: ""; position: absolute; left: 6px; width: 8px; height: 8px; border-radius: 50%; background: #b7c4b8; }
+.notification-row.unread { border-color: var(--color-border); background: #f1f7ef; }
+.notification-row.unread:before { background: var(--color-brand); }
+.notification-row:hover { background: #edf5eb; }
+.notification-row strong { font-size: 14px; }
+.notification-row small { color: var(--color-muted); }
+.notification-row span { color: var(--color-brand); }
+.conversation-row .message-avatar { width: 50px; height: 50px; background: var(--ct-leaf-100); color: var(--color-brand); }
+.conversation-time { color: var(--color-muted); }
+.unread-badge { background: var(--color-brand); }
+.profile-tab #message-count:not(:empty) { background: var(--ct-leaf-100); }
+
+/* V5.1 chat grid areas, fixed composer, polling and scroll behavior stay intact. */
+.chat-header { border-color: var(--color-border); background: var(--color-surface); }
+.chat-header h2 { color: var(--color-text); }
+.chat-context-link { border-color: #d3e3d5; border-radius: var(--radius-sm); background: #f1f7ef; color: var(--color-brand); }
+.chat-context-link strong { color: var(--color-text); }
+.chat-context-link:hover, .chat-context-link:focus-visible { border-color: var(--color-brand); background: #e8f1e9; }
+.chat-status { color: var(--color-muted); }
+.chat-status.error, .message-send-status.error { color: var(--ct-error); }
+.chat-messages { background: #f6f8f4; }
+.message-bubble { border: 1px solid var(--color-border); box-shadow: none; }
+.message-bubble.mine { border-color: var(--color-brand); background: var(--color-brand); }
+.message-bubble time { color: var(--ct-ink-400); }
+.message-bubble.mine time { color: #cce2d2; }
+.message-form { border-color: var(--color-border); }
+.message-form textarea { border-color: var(--color-border); border-radius: var(--radius-sm); }
+.message-form textarea:focus { border-color: var(--color-brand); box-shadow: 0 0 0 3px #194f3f18; }
+.chat-error { color: var(--ct-error); }
+.chat-error button { border-color: var(--color-border); color: var(--color-brand); }
+@media (max-width: 740px) {
+  .notification-row { flex-wrap: wrap; gap: 5px 12px; }
+  .notification-row strong { min-width: 0; flex: 1 1 100%; }
+  .notification-row small { flex: 1; }
+  .notification-row span { white-space: nowrap; }
+}

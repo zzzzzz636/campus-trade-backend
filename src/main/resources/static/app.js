@@ -80,6 +80,7 @@ function cover(item) {
     image.alt = item.title || '商品照片';
     image.loading = 'lazy';
     image.decoding = 'async';
+    image.addEventListener('error', () => node.replaceChildren(emptyPhoto()), { once: true });
     node.append(image);
   } else node.append(emptyPhoto());
   return node;
@@ -180,6 +181,7 @@ function renderDetailImages(product, own) {
     const main = document.createElement('img');
     main.src = image.url;
     main.alt = product.title;
+    main.addEventListener('error', () => coverHost.replaceChildren(emptyPhoto()), { once: true });
     coverHost.append(main);
   };
   if (images.length) {

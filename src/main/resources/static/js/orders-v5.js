@@ -45,6 +45,7 @@ function renderOrders(orders, host, buying) {
       const image = document.createElement('img');
       image.src = order.productCoverImageUrl;
       image.alt = order.productTitle;
+      image.addEventListener('error', () => mini.replaceChildren(emptyPhoto()), { once: true });
       mini.append(image);
     } else mini.append(emptyPhoto());
     const body = el('div', '', 'list-body');
@@ -115,7 +116,9 @@ function renderOrderDetail(order, cancellation) {
   const product = el('section', '', 'order-product-card');
   const cover = el('div', '', 'mini-cover order-cover');
   if (order.productCoverImageUrl) {
-    const image = document.createElement('img'); image.src = order.productCoverImageUrl; image.alt = order.productTitle; cover.append(image);
+    const image = document.createElement('img'); image.src = order.productCoverImageUrl; image.alt = order.productTitle;
+    image.addEventListener('error', () => cover.replaceChildren(emptyPhoto()), { once: true });
+    cover.append(image);
   } else cover.append(emptyPhoto());
   const info = el('div', '', 'list-body');
   info.append(el('h3', order.productTitle), el('p', order.productDescription || '暂无商品描述'), el('strong', money(order.price), 'order-price'));

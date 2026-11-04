@@ -52,7 +52,9 @@ export async function loadFavorites() {
     const row = el('article', '', 'list-row favorite-row');
     const mini = el('div', '', 'mini-cover');
     if (product.coverImageUrl) {
-      const image = document.createElement('img'); image.src = product.coverImageUrl; image.alt = product.title; mini.append(image);
+      const image = document.createElement('img'); image.src = product.coverImageUrl; image.alt = product.title;
+      image.addEventListener('error', () => mini.replaceChildren(emptyPhoto()), { once: true });
+      mini.append(image);
     } else mini.append(emptyPhoto());
     const body = el('div', '', 'list-body');
     body.append(el('h3', product.title), el('p', `${product.categoryName} · 发布者 ${product.sellerNickname}`),

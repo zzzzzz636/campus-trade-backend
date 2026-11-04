@@ -143,6 +143,7 @@ function renderListings(products) {
       const image = document.createElement('img');
       image.src = product.coverImageUrl;
       image.alt = product.title;
+      image.addEventListener('error', () => mini.replaceChildren(emptyPhoto()), { once: true });
       mini.append(image);
     } else mini.append(emptyPhoto());
     row.append(mini);

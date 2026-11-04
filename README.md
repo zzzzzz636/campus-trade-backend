@@ -1,6 +1,6 @@
 # CampusTrade
 
-CampusTrade 是一个面向高校学生的模块化单体二手交易平台。当前 V6 开发分支为 `feature/v6-production-readiness`，使用 Java 17、Spring Boot 4.1、Spring Security、JWT、MyBatis、MySQL/H2、Redis、SMTP、Docker Compose、Flyway 和原生 HTML/CSS/JavaScript。`main` 尚未合并该分支。
+CampusTrade 是一个面向高校学生的模块化单体二手交易平台。当前 UI 改造分支为 `feature/ui-product-redesign`，基于 V6 代码，使用 Java 17、Spring Boot 4.1、Spring Security、JWT、MyBatis、MySQL/H2、Redis、SMTP、Docker Compose、Flyway 和原生 HTML/CSS/JavaScript。`main` 尚未合并该分支。
 
 ## 当前已实现
 
@@ -19,6 +19,7 @@ CampusTrade 是一个面向高校学生的模块化单体二手交易平台。�
 - 运行说明：[`docs/quickstart.md`](docs/quickstart.md)；V6 容器部署与备份：[`docs/V6_DEPLOYMENT.md`](docs/V6_DEPLOYMENT.md)
 - V6 架构审计：[`docs/V6_ARCHITECTURE_AUDIT.md`](docs/V6_ARCHITECTURE_AUDIT.md)；[架构图与 ER 图](docs/V6_ARCHITECTURE.md)
 - [V6 API](docs/V6_API.md) · [测试记录](docs/V6_TEST_REPORT.md) · [性能记录](docs/V6_PERFORMANCE.md) · [简历证据](docs/V6_RESUME_EVIDENCE.md)
+- [全站 UI 改造记录与新旧截图](docs/UI_PRODUCT_REDESIGN.md)
 - V3 现状审计：[`docs/V3_AUDIT.md`](docs/V3_AUDIT.md)
 - V3 第一阶段记录：[`docs/V3_PHASE1.md`](docs/V3_PHASE1.md)
 - V3 第二阶段记录：[`docs/V3_PHASE2.md`](docs/V3_PHASE2.md)
