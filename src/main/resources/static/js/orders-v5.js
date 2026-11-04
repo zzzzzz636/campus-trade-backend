@@ -1,4 +1,4 @@
-import { $, dateTime, el, money, statusName, toast } from './core.js';
+import { $, dateTime, el, emptyPhoto, money, statusName, toast } from './core.js';
 import { api } from './api.js';
 
 let purchaseProduct = null;
@@ -8,7 +8,7 @@ export function configureOrders(options) { hooks = { ...hooks, ...options }; }
 
 export function emptyProfile(icon, title, detail) {
   const node = el('div', '', 'empty-state');
-  node.append(el('div', icon, 'empty-icon'), el('strong', title), el('span', detail));
+  node.append(emptyPhoto(), el('strong', title), el('span', detail));
   return node;
 }
 
@@ -46,7 +46,7 @@ function renderOrders(orders, host, buying) {
       image.src = order.productCoverImageUrl;
       image.alt = order.productTitle;
       mini.append(image);
-    } else mini.textContent = buying ? '🧾' : '📦';
+    } else mini.append(emptyPhoto());
     const body = el('div', '', 'list-body');
     body.append(el('h3', order.productTitle || `商品 #${order.productId}`),
       el('p', `订单 #${order.id} · ${order.fulfillmentType === 'SHIPPING' ? '快递邮寄' : '校园面交'}`),
@@ -102,13 +102,21 @@ function renderOrderDetail(order, cancellation) {
   titleWrap.append(el('span', order.viewerRole === 'BUYER' ? '我的购买订单' : '我的售出订单', 'eyebrow'),
     el('h2', `订单 #${order.id}`), el('p', `创建于 ${dateTime(order.createdAt)}`, 'subtle'));
   header.append(titleWrap, el('span', statusName[order.status] || order.status, statusStyle(order.status)));
-  host.append(header, progress(order));
+  const guidance = {
+    PENDING_SELLER_CONFIRMATION: order.viewerRole === 'BUYER' ? '申请已提交，等待卖家确认。' : '买家已提交申请，请选择接受或拒绝。',
+    WAITING_HANDOFF: '双方可在私信中约定面交时间与地点。',
+    WAITING_SHIPMENT: '卖家接受申请后，请确认物流安排。',
+    SHIPPED: '商品已发出，买家收到并检查后确认完成。',
+    COMPLETED: '这笔交易已完成。', CANCELLED: '订单已取消，商品恢复可售。',
+    REJECTED: '卖家已拒绝申请，商品恢复可售。', EXPIRED: '申请已超时，商品恢复可售。'
+  };
+  host.append(header, progress(order), el('p', guidance[order.status] || '', 'order-state-hint'));
 
   const product = el('section', '', 'order-product-card');
   const cover = el('div', '', 'mini-cover order-cover');
   if (order.productCoverImageUrl) {
     const image = document.createElement('img'); image.src = order.productCoverImageUrl; image.alt = order.productTitle; cover.append(image);
-  } else cover.textContent = '🛍️';
+  } else cover.append(emptyPhoto());
   const info = el('div', '', 'list-body');
   info.append(el('h3', order.productTitle), el('p', order.productDescription || '暂无商品描述'), el('strong', money(order.price), 'order-price'));
   product.append(cover, info);
@@ -126,6 +134,7 @@ function renderOrderDetail(order, cancellation) {
   host.append(facts);
 
   const actions = el('section', '', 'order-detail-actions');
+  actions.append(el('h3', '交易操作'));
   actions.append(actionButton(order.viewerRole === 'BUYER' ? '联系卖家' : '联系买家', 'outline-btn',
     () => hooks.openConversation('ORDER', order.id)));
   addStateActions(actions, order, cancellation);

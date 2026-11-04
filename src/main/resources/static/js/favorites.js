@@ -1,4 +1,4 @@
-import { $, dateTime, el, money, state, statusName, toast } from './core.js';
+import { $, dateTime, el, emptyPhoto, money, state, statusName, toast } from './core.js';
 import { api } from './api.js';
 import { emptyProfile, statusStyle } from './orders-v5.js';
 
@@ -53,7 +53,7 @@ export async function loadFavorites() {
     const mini = el('div', '', 'mini-cover');
     if (product.coverImageUrl) {
       const image = document.createElement('img'); image.src = product.coverImageUrl; image.alt = product.title; mini.append(image);
-    } else mini.textContent = '♡';
+    } else mini.append(emptyPhoto());
     const body = el('div', '', 'list-body');
     body.append(el('h3', product.title), el('p', `${product.categoryName} · 发布者 ${product.sellerNickname}`),
       el('p', `收藏于 ${dateTime(product.favoritedAt)}`));

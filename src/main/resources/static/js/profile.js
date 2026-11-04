@@ -1,4 +1,4 @@
-import { $, conditionName, dateTime, el, money, statusName, state, toast } from './core.js';
+import { $, conditionName, dateTime, el, emptyPhoto, money, statusName, state, toast } from './core.js';
 import { logout } from './auth.js';
 import { api } from './api.js';
 import { emptyProfile, renderPurchases, renderSales, statusStyle } from './orders-v5.js';
@@ -8,7 +8,7 @@ import { loadNotifications, refreshNotificationCount } from './notifications.js'
 
 let hooks = {
   navigate: () => { }, openDetail: async () => { }, startEdit: () => { },
-  takeDown: async () => { }, loadProducts: async () => { }, iconFor: () => '🛍️',
+  takeDown: async () => { }, loadProducts: async () => { },
   displayCategory: () => '校园好物'
 };
 const orderPages = { purchases: 1, sales: 1 };
@@ -54,6 +54,17 @@ async function changeOrderPage(kind, delta) {
 }
 
 export function profileTab(name) {
+  const headings = {
+    purchases: ['我买到的', '查看购买申请及交易进度。'],
+    sales: ['我卖出的', '处理同学的购买申请，跟进交易。'],
+    listings: ['我发布的', '查看商品状态，编辑在售商品或管理照片。'],
+    notifications: ['通知', '查看订单与交易的最新动态。'],
+    messages: ['私信', '与买家或卖家沟通商品和订单。'],
+    favorites: ['我的收藏', '保存感兴趣的好物，方便以后查看。'],
+    account: ['账号设置', '更新个人资料与登录密码。']
+  };
+  $('profile-pane-title').textContent = headings[name][0];
+  $('profile-pane-hint').textContent = headings[name][1];
   for (const tab of ['purchases', 'sales', 'listings', 'notifications', 'messages', 'favorites', 'account']) {
     $(`${tab}-pane`).hidden = tab !== name;
     if (tab === 'purchases' || tab === 'sales') $(`${tab}-pager`).hidden = tab !== name;
@@ -126,14 +137,14 @@ function renderListings(products) {
     return;
   }
   for (const product of products) {
-    const row = el('article', '', 'list-row');
+    const row = el('article', '', 'list-row listing-row');
     const mini = el('div', '', 'mini-cover');
     if (product.coverImageUrl) {
       const image = document.createElement('img');
       image.src = product.coverImageUrl;
       image.alt = product.title;
       mini.append(image);
-    } else mini.textContent = hooks.iconFor(product);
+    } else mini.append(emptyPhoto());
     row.append(mini);
     const body = el('div', '', 'list-body');
     body.append(el('h3', product.title),
@@ -142,11 +153,13 @@ function renderListings(products) {
     const side = el('div', '', 'list-side');
     side.append(el('strong', money(product.price)),
       el('span', statusName[product.status] || product.status, statusStyle(product.status)));
+    const actions = el('div', '', 'listing-actions');
     const manage = el('button', product.status === 'ON_SALE' ? '查看 / 管理图片' : '查看商品详情', 'row-action');
     manage.type = 'button';
     manage.addEventListener('click', () => hooks.openDetail(product.id));
-    side.append(manage);
-    if (product.status === 'ON_SALE') addSellerActions(side, product);
+    actions.append(manage);
+    if (product.status === 'ON_SALE') addSellerActions(actions, product);
+    side.append(actions);
     row.append(body, side);
     host.append(row);
   }

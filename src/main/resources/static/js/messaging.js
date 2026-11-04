@@ -1,4 +1,4 @@
-import { $, dateTime, el, toast } from './core.js';
+import { $, dateTime, el, emptyPhoto, toast } from './core.js';
 import { api } from './api.js';
 
 const POLL_INTERVAL_MS = 2500;
@@ -33,7 +33,7 @@ function renderConversations(conversations) {
   $('message-count').textContent = conversations.reduce((sum, item) => sum + Number(item.unreadCount || 0), 0);
   if (!conversations.length) {
     const empty = el('div', '', 'empty-state');
-    empty.append(el('div', '💬', 'empty-icon'), el('strong', '还没有私信'), el('span', '可从商品详情或订单详情联系对方。'));
+    empty.append(emptyPhoto(), el('strong', '还没有私信'), el('span', '可从商品详情或订单详情联系对方。'));
     host.append(empty);
     return;
   }
