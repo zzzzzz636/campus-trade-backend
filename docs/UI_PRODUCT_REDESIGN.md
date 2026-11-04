@@ -17,7 +17,7 @@
 
 ## 浏览器截图对比
 
-截图由 `V4BrowserFlowTests` 在真实 Edge + Spring Boot 测试服务器上生成；测试使用隔离 H2 与自动创建的双账号。图中的商品名称、邮箱和订单属于测试数据。`before/` 为改造前，`final/` 为最终版；最终版每个状态包含 390、768、1280、1440px。
+截图由 `V4BrowserFlowTests` 在真实 Edge + Spring Boot 测试服务器上生成；测试使用隔离 H2 与自动创建的双账号。图中的商品名称、邮箱和订单属于测试数据。`before/` 为改造前，`final/` 为最终版；个人中心在最终复核后修复了手机端退出按钮换行并重新截入 `final/`。每个状态包含 390、768、1280、1440px。
 
 | 页面 | 改造前 | 最终版 |
 |---|---|---|
@@ -25,7 +25,7 @@
 | 商品广场 | [390px](ui-screenshots/before/plaza-390.png) · [1280px](ui-screenshots/before/plaza-1280.png) | [390px](ui-screenshots/final/plaza-390.png) · [1280px](ui-screenshots/final/plaza-1280.png) |
 | 商品详情 | [390px](ui-screenshots/before/detail-390.png) · [1280px](ui-screenshots/before/detail-1280.png) | [390px](ui-screenshots/final/detail-390.png) · [1280px](ui-screenshots/final/detail-1280.png) |
 | 发布商品 | [390px](ui-screenshots/before/publish-390.png) · [1280px](ui-screenshots/before/publish-1280.png) | [390px](ui-screenshots/final/publish-390.png) · [1280px](ui-screenshots/final/publish-1280.png) |
-| 个人中心 | [390px](ui-screenshots/before/profile-390.png) · [1280px](ui-screenshots/before/profile-1280.png) | [390px](ui-screenshots/final/profile-390.png) · [1280px](ui-screenshots/final/profile-1280.png) |
+| 个人中心 | [390px](ui-screenshots/before/profile-390.png) · [1280px](ui-screenshots/before/profile-1280.png) | [390px 最终复核](ui-screenshots/final/profile-390.png) · [1280px 最终复核](ui-screenshots/final/profile-1280.png) |
 | 订单详情 | [390px](ui-screenshots/before/order-390.png) · [1280px](ui-screenshots/before/order-1280.png) | [390px](ui-screenshots/final/order-390.png) · [1280px](ui-screenshots/final/order-1280.png) |
 | 私信 | [390px](ui-screenshots/before/chat-390.png) · [1280px](ui-screenshots/before/chat-1280.png) | [390px 消息会话](ui-screenshots/final/chat-filled-390.png) · [1280px 消息会话](ui-screenshots/final/chat-filled-1280.png) |
 

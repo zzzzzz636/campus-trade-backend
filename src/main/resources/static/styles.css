@@ -386,10 +386,11 @@ button { touch-action: manipulation; }
 .timeline-item time, .timeline-item p { color: var(--color-muted); }
 .danger-outline { border-color: #eac8bd; color: var(--ct-error); }
 @media (max-width: 740px) {
-  .profile-banner { min-height: 120px; padding: 18px; gap: 12px; }
+  .profile-banner { display: grid; grid-template-columns: 52px minmax(0,1fr); min-height: 120px; padding: 18px; gap: 9px 12px; }
   .profile-banner .avatar.large { width: 52px; height: 52px; }
   .profile-banner h1 { font-size: 21px; }
-  .profile-banner p { overflow-wrap: anywhere; }
+  .profile-banner p { overflow-wrap: anywhere; font-size: 11px; }
+  .profile-banner .white-outline { grid-column: 2; justify-self: start; min-height: 36px; margin: 0; padding: 7px 12px; white-space: nowrap; }
   .profile-tabs { gap: 18px; margin: 0 -16px; padding: 0 16px; }
   .profile-tab { font-size: 13px; }
   .profile-pane-heading { display: block; margin: 22px 0 12px; }

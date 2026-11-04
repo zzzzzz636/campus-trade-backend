@@ -425,7 +425,7 @@ class V4BrowserFlowTests {
 
     private void captureUi(Page page, String name) {
         String phase = System.getProperty("campus.ui.capture");
-        if (phase == null || !phase.matches("before|after|final")) return;
+        if (phase == null || !phase.matches("before|after|final|polish")) return;
         String only = System.getProperty("campus.ui.only");
         if (only != null && !java.util.Arrays.asList(only.split(",")).contains(name)) return;
         Path directory = Path.of("docs", "ui-screenshots", phase);
@@ -448,6 +448,10 @@ class V4BrowserFlowTests {
                             "node => node.getBoundingClientRect().height / node.getBoundingClientRect().width");
                     assertTrue(cardAspect.doubleValue() < 2.1, "商品卡片不应被异常拉伸");
                     assertThat(page.locator("#products .product-cover .photo-empty").first()).isVisible();
+                }
+                if ("profile".equals(name) && viewport[0] <= 740) {
+                    Number logoutHeight = (Number) page.locator("#logout").evaluate("node => node.getBoundingClientRect().height");
+                    assertTrue(logoutHeight.doubleValue() <= 48, "手机端退出按钮不应换行拉高");
                 }
                 if (name.startsWith("chat")) {
                     Number messagesHeight = (Number) page.locator("#chat-messages").evaluate("node => node.getBoundingClientRect().height");
