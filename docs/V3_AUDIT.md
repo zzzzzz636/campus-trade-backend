@@ -1,7 +1,7 @@
 # CampusTrade V3 现状审计
 
 审计日期：2026-10-30  
-审计范围：`E:\campus-trade-backend` 的源码、配置、SQL、前端、测试报告、本机服务和 Docker 开发基础设施。本文记录的是 V3 开工时的基线；已处理事项见 `V3_PHASE1.md` 和 `V3_PHASE2.md`。
+审计范围：`项目根目录` 的源码、配置、SQL、前端、测试报告、本机服务和 Docker 开发基础设施。本文记录的是 V3 开工时的基线；已处理事项见 `V3_PHASE1.md` 和 `V3_PHASE2.md`。
 
 ## 1. 审计结论
 

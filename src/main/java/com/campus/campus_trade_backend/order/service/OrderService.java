@@ -14,8 +14,10 @@ import com.campus.campus_trade_backend.order.mapper.NotificationMapper;
 import com.campus.campus_trade_backend.order.mapper.CancellationRequestMapper;
 import com.campus.campus_trade_backend.order.mapper.OrderEventMapper;
 import com.campus.campus_trade_backend.order.mapper.OrderMapper;
+import com.campus.campus_trade_backend.order.mapper.OrderOutboxMapper;
 import com.campus.campus_trade_backend.product.entity.ProductEntity;
 import com.campus.campus_trade_backend.product.mapper.ProductMapper;
+import com.campus.campus_trade_backend.product.mapper.ProductSearchOutboxMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -43,18 +45,25 @@ public class OrderService {
     private final OrderMapper orderMapper;
     private final OrderEventMapper orderEventMapper;
     private final NotificationMapper notificationMapper;
+    private final OrderOutboxMapper outboxMapper;
+    private final ProductSearchOutboxMapper searchOutbox;
     private final CancellationRequestMapper cancellationRequestMapper;
 
     @Value("${campus.order.confirmation-hours:24}")
     private long confirmationHours;
+    @Value("${campus.rabbit.enabled:false}")
+    private boolean rabbitEnabled;
 
     public OrderService(ProductMapper productMapper, OrderMapper orderMapper,
                         OrderEventMapper orderEventMapper, NotificationMapper notificationMapper,
-                        CancellationRequestMapper cancellationRequestMapper) {
+                        CancellationRequestMapper cancellationRequestMapper, OrderOutboxMapper outboxMapper,
+                        ProductSearchOutboxMapper searchOutbox) {
         this.productMapper = productMapper;
         this.orderMapper = orderMapper;
         this.orderEventMapper = orderEventMapper;
         this.notificationMapper = notificationMapper;
+        this.outboxMapper = outboxMapper;
+        this.searchOutbox = searchOutbox;
         this.cancellationRequestMapper = cancellationRequestMapper;
     }
 
@@ -81,12 +90,15 @@ public class OrderService {
         if (product.getSellerId().equals(buyerId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不能申请购买自己的商品");
         }
-        previous = findIdempotentOrder(buyerId, request.productId(), requestKey);
-        if (previous != null) return toResponse(orderMapper.findById(previous.getId()));
+        // MySQL REPEATABLE READ 的普通 SELECT 会沿用先前快照；商品锁后改用当前读，
+        // 才能看见等待商品锁期间由另一请求提交的同一请求键订单。
+        previous = findIdempotentOrderForUpdate(buyerId, request.productId(), requestKey);
+        if (previous != null) return toResponse(orderMapper.findByIdForUpdate(previous.getId()));
         if (!"ON_SALE".equals(product.getStatus()) ||
                 productMapper.reserveForOrder(product.getId(), buyerId) != 1) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "商品已有待处理申请或已下架");
         }
+        searchOutbox.enqueue(product.getId(), "RESERVED");
 
         FulfillmentType fulfillment = request.fulfillmentType() == null
                 ? FulfillmentType.CAMPUS_HANDOFF : request.fulfillmentType();
@@ -200,6 +212,7 @@ public class OrderService {
         if (productMapper.markSold(order.getProductId()) != 1) {
             conflict("商品状态异常，确认收货已回滚");
         }
+        searchOutbox.enqueue(order.getProductId(), "SOLD");
         record(orderId, buyerId, "BUYER_COMPLETED", from, "COMPLETED", null);
         notifyUser(order.getSellerId(), "ORDER_COMPLETED", orderId, "买家已确认收货，交易完成");
         log.info("订单状态转换 orderId={} actorId={} from={} to=COMPLETED", orderId, buyerId, from);
@@ -340,6 +353,15 @@ public class OrderService {
         return existing;
     }
 
+    private OrderEntity findIdempotentOrderForUpdate(long buyerId, long productId, String requestKey) {
+        if (requestKey == null) return null;
+        OrderEntity existing = orderMapper.findByBuyerAndRequestKeyForUpdate(buyerId, requestKey);
+        if (existing != null && !existing.getProductId().equals(productId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "请求键已用于其他商品");
+        }
+        return existing;
+    }
+
     private void validateFulfillment(CreateOrderRequest request, FulfillmentType fulfillment) {
         if (fulfillment == FulfillmentType.SHIPPING &&
                 (isBlank(request.recipientName()) || isBlank(request.recipientPhone()) || isBlank(request.shippingAddress()))) {
@@ -351,6 +373,7 @@ public class OrderService {
         if (productMapper.releaseAfterCancellation(order.getProductId()) != 1) {
             conflict("商品状态异常，" + operation + "已回滚");
         }
+        searchOutbox.enqueue(order.getProductId(), "RELEASED");
     }
 
     private OrderEntity requireOrder(long orderId) {
@@ -395,7 +418,12 @@ public class OrderService {
     }
 
     private void notifyUser(long userId, String type, long orderId, String title) {
-        notificationMapper.insert(userId, type, orderId, title);
+        if (rabbitEnabled && "ORDER_APPLICATION".equals(type)) {
+            // 与商品预订、订单写入同事务落库；消费者幂等地生成卖家站内通知。
+            outboxMapper.enqueue(type + ":" + orderId + ":" + userId, orderId, userId, type, title);
+        } else {
+            notificationMapper.insert(userId, type, orderId, title);
+        }
     }
 
     private static OrderResponse toResponse(OrderEntity order) {

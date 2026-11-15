@@ -628,3 +628,47 @@ button { touch-action: manipulation; }
   #home-view .market-item-price { font-size: 16px; }
   #home-view .market-item-seller { font-size: 10px; }
 }
+
+.product-risk-panel { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 17px 0; border-top: 1px solid var(--color-line, #e3e7e1); }
+.product-risk-panel strong { display: block; font-size: 14px; }
+.product-risk-panel p { margin: 4px 0 0; color: var(--color-muted, #6d776e); font-size: 12px; line-height: 1.5; }
+.product-risk-panel button { flex: none; }
+.product-risk-result { padding: 16px 18px; border: 1px solid #d7e1d3; border-radius: var(--radius-sm, 8px); background: #f5f9f3; font-size: 13px; line-height: 1.6; }
+.product-risk-result[data-level="medium"] { border-color: #e3d6aa; background: #fcf8ed; }
+.product-risk-result[data-level="high"] { border-color: #e6c1b5; background: #fff6f2; }
+.product-risk-result h3 { margin: 0 0 8px; font-size: 15px; }
+.product-risk-result p { margin: 8px 0 0; color: var(--color-muted, #6d776e); }
+.product-risk-result ul { margin: 5px 0 0; padding-left: 20px; }
+@media (max-width: 600px) { .product-risk-panel { align-items: stretch; flex-direction: column; } .product-risk-panel button { width: 100%; } }
+
+.agent-entry { flex: none; border: 1px solid #d5dfd3; border-radius: 4px; background: #f5f8f2; color: #284131; padding: 9px 13px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.agent-entry:hover { border-color: #849d87; }
+.preview-mode .agent-entry { display: none; }
+.agent-dialog[open] { display: grid; grid-template-rows: auto minmax(0,1fr) auto auto; width: min(560px,calc(100vw - 28px)); max-width: none; height: min(690px,calc(100dvh - 28px)); max-height: none; padding: 0; border: 1px solid #dfe6db; border-radius: 8px; background: #fffefa; color: #24342a; box-shadow: 0 24px 70px #18271b38; overflow: hidden; }
+.agent-dialog::backdrop { background: #142019a8; }
+.agent-header { position: relative; padding: 19px 55px 16px 22px; border-bottom: 1px solid #e4e9e1; }
+.agent-header h2 { margin: 3px 0 5px; font-size: 21px; }
+.agent-header p { margin: 0; color: #69766a; font-size: 12px; }
+.agent-header .close-button { position: absolute; top: 15px; right: 16px; }
+.agent-messages { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 20px; }
+.agent-intro { max-width: 370px; margin: auto; color: #647268; text-align: center; line-height: 1.7; font-size: 13px; }
+.agent-message { max-width: 92%; padding: 11px 13px; border: 1px solid #e2e8de; border-radius: 7px; background: #fff; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.agent-message.user { align-self: flex-end; background: #edf4e9; border-color: #d8e6d3; }
+.agent-message.assistant { align-self: flex-start; }
+.agent-message p { margin: 0; white-space: pre-wrap; }
+.agent-products { display: grid; gap: 8px; margin-top: 12px; }
+.agent-product { display: flex; align-items: center; width: 100%; gap: 10px; padding: 6px; border: 1px solid #e5e8e1; background: #fffefa; text-align: left; cursor: pointer; color: inherit; }
+.agent-product img, .agent-product .photo-empty { flex: none; width: 52px; height: 52px; object-fit: cover; }
+.agent-product span { font-weight: 700; }
+.agent-orders { padding-left: 19px; }
+.agent-message .outline-btn { margin-top: 12px; }
+.agent-status { min-height: 20px; margin: 0; padding: 2px 18px; color: #92513c; font-size: 12px; }
+.agent-form { display: flex; gap: 9px; align-items: flex-end; padding: 12px 18px max(14px,env(safe-area-inset-bottom)); border-top: 1px solid #e4e9e1; }
+.agent-form textarea { flex: 1; min-width: 0; max-height: 110px; resize: vertical; padding: 10px; border: 1px solid #cfd8ce; border-radius: 4px; font: inherit; font-size: 13px; }
+.agent-form button { flex: none; align-self: flex-end; min-width: 64px; min-height: 39px; }
+@media (max-width: 600px) {
+  .agent-entry { position: fixed; z-index: 20; right: 13px; bottom: max(16px,env(safe-area-inset-bottom)); padding: 11px 13px; box-shadow: 0 8px 23px #17251b32; background: #f5f8f2; }
+  .agent-dialog[open] { width: 100vw; height: 100dvh; border: 0; border-radius: 0; }
+  .agent-header { padding: 15px 50px 14px 16px; }
+  .agent-messages { padding: 16px; }
+}

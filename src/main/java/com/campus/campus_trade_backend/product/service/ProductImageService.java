@@ -49,6 +49,9 @@ public class ProductImageService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "每件商品最多上传 6 张图片");
         }
 
+        // 已锁定商品行；并发上传会在这里串行读取最新排序值。数量只用于限制张数，不能用于分配排序值。
+        int nextSortOrder = imageMapper.maxSortOrderByProductId(productId) + 1;
+
         List<String> storedKeys = new ArrayList<>();
         registerRollbackCleanup(storedKeys);
         for (int index = 0; index < files.size(); index++) {
@@ -63,7 +66,7 @@ public class ProductImageService {
             image.setOriginalName(safeOriginalName(file.getOriginalFilename(), type.extension()));
             image.setContentType(type.contentType());
             image.setFileSize(stored.size());
-            image.setSortOrder(existing + index);
+            image.setSortOrder(nextSortOrder + index);
             imageMapper.insert(image);
         }
         return list(productId);

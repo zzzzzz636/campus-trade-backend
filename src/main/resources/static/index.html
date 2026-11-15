@@ -68,6 +68,7 @@
           <button id="nav-home" class="nav-item active" type="button">商品广场</button>
           <button id="nav-publish" class="nav-item" type="button">发布闲置</button>
         </nav>
+        <button id="open-ai-agent" class="agent-entry" type="button">AI 智能助手</button>
         <button id="nav-profile" class="profile-link" type="button"><span id="header-avatar" class="avatar">同</span><span>个人中心</span><span class="chevron" aria-hidden="true">›</span></button>
       </div>
     </header>
@@ -105,6 +106,11 @@
           <div><span class="ai-badge">AI 辅助</span><strong>把原始描述整理得更清楚</strong><p>先在上方写下真实的物品情况，AI 会建议标题、描述和分类；生成后仍由你检查并确认发布。</p></div>
           <button id="ai-draft-button" class="ai-draft-button" type="button">AI 帮我整理</button>
         </div>
+        <div class="product-risk-panel">
+          <div><strong>交易风险检查</strong><p>核对价格、付款要求和描述完整性。检查结果仅供提醒，不影响手动发布。</p></div>
+          <button id="product-risk-button" class="outline-btn" type="button">检查当前商品</button>
+        </div>
+        <div id="product-risk-result" class="product-risk-result" aria-live="polite" hidden></div>
         <div class="form-footer"><span id="publish-form-tip" class="subtle">请如实填写物品情况，发布后可以编辑。</span><div class="publish-controls"><button id="publish-preview" class="outline-btn" type="button">预览商品</button><button id="publish-submit" class="primary" type="submit">确认发布 →</button></div></div>
       </form></div><aside class="publish-assist"><span class="eyebrow">发布小贴士</span><h2>让好物被看见</h2><ol><li>上传光线清晰的实物照片，展示重要细节。</li><li>注明使用情况和瑕疵，减少来回沟通。</li><li>参考同类商品，填写合适的价格。</li></ol><p>发布后，同学可以通过商品详情与你私信或提交购买申请。</p></aside></div>
     </section>
@@ -191,5 +197,11 @@
       </form>
     </section>
   </div>
+  <dialog id="ai-agent-dialog" class="agent-dialog" aria-labelledby="ai-agent-title">
+    <header class="agent-header"><div><span class="eyebrow">CAMPUS ASSISTANT</span><h2 id="ai-agent-title">AI 智能助手</h2><p>帮你找真实在售商品、查自己的订单、整理发布草稿</p></div><button id="close-ai-agent" class="close-button" type="button" aria-label="关闭 AI 助手">×</button></header>
+    <div id="ai-agent-messages" class="agent-messages" role="log" aria-live="polite"><p class="agent-intro">试试问：“找 300 元以内的机械键盘”，或“查看我的购买订单”。商品和订单卡片来自平台实际数据。</p></div>
+    <p id="ai-agent-status" class="agent-status" role="status" aria-live="polite"></p>
+    <form id="ai-agent-form" class="agent-form"><label class="sr-only" for="ai-agent-input">向 AI 助手提问</label><textarea id="ai-agent-input" maxlength="500" rows="2" placeholder="输入问题；Enter 发送，Shift+Enter 换行" required></textarea><button id="ai-agent-send" class="primary" type="submit">发送</button></form>
+  </dialog>
 </body>
 </html>

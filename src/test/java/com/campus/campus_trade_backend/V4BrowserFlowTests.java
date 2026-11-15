@@ -180,7 +180,7 @@ class V4BrowserFlowTests {
         APIResponse forbidden = buyerContext.request().put(baseUrl() + "/api/products/" + productId,
                 RequestOptions.create()
                         .setHeader("Authorization", "Bearer " + buyerToken)
-                        .setData(Map.of("categoryId", 1, "title", "越权修改", "description", "不允许",
+                        .setData(Map.of("version", 0, "categoryId", 1, "title", "越权修改", "description", "不允许",
                                 "price", 1.00, "conditionLevel", "GOOD")));
         assertEquals(403, forbidden.status());
         forbidden.dispose();

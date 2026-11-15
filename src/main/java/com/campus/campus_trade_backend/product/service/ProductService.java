@@ -6,6 +6,7 @@ import com.campus.campus_trade_backend.product.dto.ProductsPageResponse;
 import com.campus.campus_trade_backend.product.dto.MyProductResponse;
 import com.campus.campus_trade_backend.product.entity.ProductEntity;
 import com.campus.campus_trade_backend.product.mapper.ProductMapper;
+import com.campus.campus_trade_backend.product.mapper.ProductSearchOutboxMapper;
 import com.campus.campus_trade_backend.product.mapper.ProductImageMapper;
 import com.campus.campus_trade_backend.category.mapper.CategoryMapper;
 import com.campus.campus_trade_backend.product.dto.CreateProductRequest;
@@ -13,6 +14,7 @@ import com.campus.campus_trade_backend.product.dto.ProductSort;
 import com.campus.campus_trade_backend.product.dto.UpdateProductRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -26,12 +28,14 @@ public class ProductService {
     private final ProductMapper productMapper;
     private final CategoryMapper categoryMapper;
     private final ProductImageMapper productImageMapper;
+    private final ProductSearchOutboxMapper searchOutbox;
 
     public ProductService(ProductMapper productMapper, CategoryMapper categoryMapper,
-                          ProductImageMapper productImageMapper) {
+                          ProductImageMapper productImageMapper, ProductSearchOutboxMapper searchOutbox) {
         this.productMapper = productMapper;
         this.categoryMapper = categoryMapper;
         this.productImageMapper = productImageMapper;
+        this.searchOutbox = searchOutbox;
     }
 
     public ProductsPageResponse list(int page, int size) {
@@ -82,15 +86,18 @@ public class ProductService {
         return Optional.ofNullable(product).map(this::toDetail);
     }
 
+    @Transactional
     public long create(CreateProductRequest request, long sellerId) {
         validateCategory(request.categoryId());
         ProductEntity product = product(request.categoryId(), request.title(), request.description(),
                 request.price(), request.conditionLevel().name());
         product.setSellerId(sellerId);
         productMapper.insert(product);
+        searchOutbox.enqueue(product.getId(), "CREATED");
         return product.getId();
     }
 
+    @Transactional
     public ProductDetailResponse update(long id, long sellerId, UpdateProductRequest request) {
         ProductEntity existing = productMapper.findAnyById(id);
         if (existing == null) {
@@ -105,9 +112,10 @@ public class ProductService {
         validateCategory(request.categoryId());
         ProductEntity changes = product(request.categoryId(), request.title(), request.description(),
                 request.price(), request.conditionLevel().name());
-        if (productMapper.updateOnSale(id, sellerId, changes) != 1) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "商品状态已变化，请刷新后重试");
+        if (productMapper.updateOnSale(id, sellerId, request.version(), changes) != 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "商品信息或状态已变化，请刷新后重试");
         }
+        searchOutbox.enqueue(id, "UPDATED");
         ProductEntity updated = productMapper.findVisibleById(id, sellerId);
         if (updated == null) {
             throw new IllegalStateException("商品更新后无法读取：" + id);
@@ -115,6 +123,7 @@ public class ProductService {
         return toDetail(updated);
     }
 
+    @Transactional
     public void takeDown(long id, long sellerId) {
         ProductEntity product = productMapper.findAnyById(id);
         if (product == null) {
@@ -129,6 +138,20 @@ public class ProductService {
         if (!"ON_SALE".equals(product.getStatus()) || productMapper.takeDown(id, sellerId) != 1) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "商品当前无法下架");
         }
+        searchOutbox.enqueue(id, "OFF_SHELF");
+    }
+
+    @Transactional
+    public void relist(long id, long sellerId) {
+        ProductEntity product = productMapper.findAnyById(id);
+        if (product == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "商品不存在");
+        if (!product.getSellerId().equals(sellerId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只能重新上架自己的商品");
+        }
+        if (!"OFF_SHELF".equals(product.getStatus()) || productMapper.relist(id, sellerId) != 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "只有已下架商品可以重新上架");
+        }
+        searchOutbox.enqueue(id, "RELISTED");
     }
 
     private static ProductSummaryResponse toSummary(ProductEntity product) {
@@ -138,7 +161,7 @@ public class ProductService {
     }
 
     private ProductDetailResponse toDetail(ProductEntity product) {
-        return new ProductDetailResponse(product.getId(), product.getSellerId(), product.getSellerNickname(),
+        return new ProductDetailResponse(product.getId(), product.getVersion(), product.getSellerId(), product.getSellerNickname(),
                 product.getCategoryId(), product.getCategoryName(),
                 product.getTitle(), product.getDescription(), product.getPrice(), product.getConditionLevel(), product.getStatus(),
                 productImageMapper.listByProductId(product.getId()).stream()

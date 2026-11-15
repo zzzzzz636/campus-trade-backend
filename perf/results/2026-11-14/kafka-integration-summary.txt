@@ -1,0 +1,7 @@
+KAFKA_BACKLOG_RECOVERY events=200 productPartitionKey=526232 recoveryMs=1007
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 16.57 s -- in com.campus.campus_trade_backend.KafkaBehaviorIntegrationTests
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0
+KAFKA_BACKLOG_RECOVERY events=200 productPartitionKey=586778 recoveryMs=876
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0
+KAFKA_BACKLOG_RECOVERY events=200 productPartitionKey=543158 recoveryMs=744
+Tests run: 6, Failures: 0, Errors: 0, Skipped: 0 -- KafkaBehaviorIntegrationTests, real Kafka + Redis Testcontainers; includes malformed event to DLT

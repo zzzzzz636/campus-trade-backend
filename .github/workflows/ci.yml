@@ -16,6 +16,8 @@ jobs:
           cache: maven
       - name: Compile and run unit/H2 tests
         run: bash ./mvnw -B test
+      - name: Package application
+        run: bash ./mvnw -B -DskipTests package
 
   mysql-redis-smtp:
     runs-on: ubuntu-latest
@@ -34,7 +36,31 @@ jobs:
           java-version: '17'
           cache: maven
       - name: Run MySQL Testcontainers and real Redis/SMTP integration tests
-        run: bash ./mvnw -B '-Dcampus.mysql.tests=true' '-Dtest=MySqlOrderConcurrencyIntegrationTests,DockerMailRedisIntegrationTests' test
+        run: bash ./mvnw -B '-Dcampus.mysql.tests=true' '-Dcampus.rabbit.tests=true' '-Dtest=MySqlOrderConcurrencyIntegrationTests,MySqlOrderIdempotencyRaceTests,RabbitOrderOutboxIntegrationTests,DockerMailRedisIntegrationTests' test
+
+  search-events:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Run real MySQL RabbitMQ Elasticsearch event tests
+        run: bash ./mvnw -B '-Dcampus.rabbit.tests=true' '-Dcampus.search.tests=true' '-Dtest=MySqlRabbitOutboxIntegrationTests,MySqlRabbitElasticsearchIntegrationTests' test
+
+  kafka-behavior:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Test real Kafka and Redis behavior flow
+        run: bash ./mvnw -B '-Dcampus.kafka.tests=true' '-Dtest=KafkaBehaviorIntegrationTests' test
 
   browser-windows:
     runs-on: windows-latest

@@ -7,6 +7,7 @@ import com.campus.campus_trade_backend.product.dto.CreateProductRequest;
 import com.campus.campus_trade_backend.product.dto.ProductCreatedResponse;
 import com.campus.campus_trade_backend.product.dto.UpdateProductRequest;
 import com.campus.campus_trade_backend.product.service.ProductService;
+import com.campus.campus_trade_backend.behavior.BehaviorRecorder;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.DecimalMin;
@@ -34,9 +35,11 @@ import java.math.BigDecimal;
 public class ProductController {
 
     private final ProductService productService;
+    private final BehaviorRecorder behaviorRecorder;
 
-    public ProductController(ProductService productService) {
+    public ProductController(ProductService productService, BehaviorRecorder behaviorRecorder) {
         this.productService = productService;
+        this.behaviorRecorder = behaviorRecorder;
     }
 
     @GetMapping
@@ -60,8 +63,10 @@ public class ProductController {
     @GetMapping("/{id}")
     public ProductDetailResponse detail(@AuthenticationPrincipal Jwt jwt, @PathVariable @Min(1) long id) {
         Long viewerId = jwt == null ? null : Long.parseLong(jwt.getSubject());
-        return productService.findVisibleById(id, viewerId)
+        ProductDetailResponse detail = productService.findVisibleById(id, viewerId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "商品不存在"));
+        if ("ON_SALE".equals(detail.status())) behaviorRecorder.view(id);
+        return detail;
     }
 
     @PostMapping
@@ -81,5 +86,11 @@ public class ProductController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void takeDown(@AuthenticationPrincipal Jwt jwt, @PathVariable @Min(1) long id) {
         productService.takeDown(id, Long.parseLong(jwt.getSubject()));
+    }
+
+    @PostMapping("/{id}/relist")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void relist(@AuthenticationPrincipal Jwt jwt, @PathVariable @Min(1) long id) {
+        productService.relist(id, Long.parseLong(jwt.getSubject()));
     }
 }

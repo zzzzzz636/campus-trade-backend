@@ -104,7 +104,7 @@ class V4MultiUserSecurityIntegrationTests {
 
         mvc.perform(put("/api/products/{id}", productId)
                         .header("Authorization", bearer(buyer.token()))
-                        .contentType(MediaType.APPLICATION_JSON).content(productJson("越权修改", "1.00")))
+                        .contentType(MediaType.APPLICATION_JSON).content(editJson(productId, seller.token(), "越权修改", "1.00")))
                 .andExpect(status().isForbidden());
         mvc.perform(delete("/api/products/{id}", productId)
                         .header("Authorization", bearer(buyer.token())))
@@ -119,7 +119,7 @@ class V4MultiUserSecurityIntegrationTests {
 
         mvc.perform(put("/api/products/{id}", productId)
                         .header("Authorization", bearer(seller.token()))
-                        .contentType(MediaType.APPLICATION_JSON).content(productJson("A 更新后的校园教材", "17.50")))
+                        .contentType(MediaType.APPLICATION_JSON).content(editJson(productId, seller.token(), "A 更新后的校园教材", "17.50")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("A 更新后的校园教材"));
 
@@ -136,7 +136,7 @@ class V4MultiUserSecurityIntegrationTests {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CANCELLED"));
         mvc.perform(put("/api/products/{id}", productId)
                         .header("Authorization", bearer(seller.token()))
-                        .contentType(MediaType.APPLICATION_JSON).content(productJson("取消后重新编辑", "16.00")))
+                        .contentType(MediaType.APPLICATION_JSON).content(editJson(productId, seller.token(), "取消后重新编辑", "16.00")))
                 .andExpect(status().isOk());
 
         long completedOrderId = orderId(productId, buyer.token());
@@ -150,7 +150,7 @@ class V4MultiUserSecurityIntegrationTests {
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].status").value("SOLD"));
         mvc.perform(put("/api/products/{id}", productId)
                         .header("Authorization", bearer(seller.token()))
-                        .contentType(MediaType.APPLICATION_JSON).content(productJson("售出后修改", "1.00")))
+                        .contentType(MediaType.APPLICATION_JSON).content(editJson(productId, seller.token(), "售出后修改", "1.00")))
                 .andExpect(status().isConflict());
         mvc.perform(get("/api/products/{id}", productId).header("Authorization", bearer(buyer.token())))
                 .andExpect(status().isNotFound());
@@ -175,7 +175,7 @@ class V4MultiUserSecurityIntegrationTests {
     private void assertReservedProductCannotBeManaged(long productId, String sellerToken) throws Exception {
         mvc.perform(put("/api/products/{id}", productId)
                         .header("Authorization", bearer(sellerToken))
-                        .contentType(MediaType.APPLICATION_JSON).content(productJson("预订中修改", "1.00")))
+                        .contentType(MediaType.APPLICATION_JSON).content(editJson(productId, sellerToken, "预订中修改", "1.00")))
                 .andExpect(status().isConflict());
         mvc.perform(delete("/api/products/{id}", productId)
                         .header("Authorization", bearer(sellerToken)))
@@ -236,6 +236,15 @@ class V4MultiUserSecurityIntegrationTests {
         return "{\"categoryId\":1,\"title\":\"" + title +
                 "\",\"description\":\"V4 多用户权限与交易闭环测试\",\"price\":" + price +
                 ",\"conditionLevel\":\"GOOD\"}";
+    }
+
+    private String editJson(long productId, String sellerToken, String title, String price) throws Exception {
+        MvcResult detail = mvc.perform(get("/api/products/{id}", productId)
+                        .header("Authorization", bearer(sellerToken)))
+                .andExpect(status().isOk()).andReturn();
+        int version = objectMapper.readTree(detail.getResponse().getContentAsString(StandardCharsets.UTF_8))
+                .path("version").asInt();
+        return productJson(title, price).replaceFirst("\\{", "{\"version\":" + version + ",");
     }
 
     private record Session(long id, String email, String token) { }

@@ -66,7 +66,7 @@ class MySqlOrderConcurrencyIntegrationTests {
 
     @Test
     void flywayCreatesCurrentSchemaAndRequiredIndexes() {
-        assertEquals(5L, jdbc.queryForObject(
+        assertEquals(7L, jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1", Long.class));
         assertEquals(5L, jdbc.queryForObject("SELECT COUNT(*) FROM category", Long.class));
         assertTrue(indexExists("product", "idx_product_status_created_id"));
@@ -153,7 +153,7 @@ class MySqlOrderConcurrencyIntegrationTests {
         assertTrue(filtered.items().get(0).createdAt() != null);
 
         var updated = productService.update(editableId, sellerId,
-                new UpdateProductRequest(1L, marker + " 已更新", "MySQL 条件更新",
+                new UpdateProductRequest(0, 1L, marker + " 已更新", "MySQL 条件更新",
                         new BigDecimal("18.50"), ConditionLevel.FAIR));
         assertEquals(marker + " 已更新", updated.title());
         assertEquals("教材", updated.categoryName());

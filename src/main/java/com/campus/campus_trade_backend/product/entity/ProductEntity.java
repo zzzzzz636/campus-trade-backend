@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 
 public class ProductEntity {
     private Long id;
+    private Integer version;
     private Long sellerId;
     private String sellerNickname;
     private Long categoryId;
@@ -20,6 +21,8 @@ public class ProductEntity {
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
+    public Integer getVersion() { return version; }
+    public void setVersion(Integer version) { this.version = version; }
     public Long getSellerId() { return sellerId; }
     public void setSellerId(Long sellerId) { this.sellerId = sellerId; }
     public String getSellerNickname() { return sellerNickname; }

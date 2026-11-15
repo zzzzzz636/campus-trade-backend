@@ -1,0 +1,2 @@
+EXPLAIN
+-> Aggregate: count(0)  (cost=1119 rows=1) (actual time=10.8..10.8 rows=1 loops=1)\n    -> Filter: ((lower(p.title) like '%教材%') or (lower(p.`description`) like '%教材%'))  (cost=620 rows=4990) (actual time=0.0384..10.7 rows=2500 loops=1)\n        -> Index lookup on p using idx_product_status_created_id (status='ON_SALE')  (cost=620 rows=4990) (actual time=0.0301..7.21 rows=10000 loops=1)\n

@@ -28,6 +28,9 @@ public interface ProductImageMapper {
     @Select("SELECT COUNT(*) FROM product_image WHERE product_id = #{productId}")
     int countByProductId(@Param("productId") long productId);
 
+    @Select("SELECT COALESCE(MAX(sort_order), -1) FROM product_image WHERE product_id = #{productId}")
+    int maxSortOrderByProductId(@Param("productId") long productId);
+
     @Insert("""
             INSERT INTO product_image
                 (product_id, storage_key, original_name, content_type, file_size, sort_order, created_at)

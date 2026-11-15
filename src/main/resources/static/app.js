@@ -7,6 +7,7 @@ import { bindMessagingEvents, closeChat, configureMessaging, openConversation } 
 import { configureFavorites, favoriteButton, loadFavoriteIds } from './js/favorites.js';
 import { bindNotificationEvents, configureNotifications } from './js/notifications.js';
 import { createMarketCard } from './js/market-card.js';
+import { bindAgent } from './js/agent.js';
 
 let previewItems = [];
 let previewCategories = [];
@@ -333,6 +334,7 @@ async function takeDown(id) {
 
 function setPublishMode(product = null) {
   state.editingProduct = product;
+  clearProductRiskResult();
   const editing = Boolean(product);
   $('publish-eyebrow').textContent = editing ? 'EDIT LISTING' : 'SELL AN ITEM';
   $('publish-title').textContent = editing ? '编辑商品信息' : '发布你的闲置';
@@ -554,12 +556,68 @@ $('ai-draft-button').addEventListener('click', async () => {
     form.elements.title.value = suggestion.title;
     form.elements.description.value = suggestion.description;
     form.elements.categoryId.value = String(suggestion.categoryId);
+    clearProductRiskResult();
     toast(`AI 已建议“${suggestion.categoryName}”分类。请检查内容和价格后再发布。`);
   } catch (error) {
     toast(`AI 整理未完成：${error.message}。原内容已保留，可以继续手动发布。`, true);
   } finally {
     button.disabled = false;
     button.textContent = 'AI 帮我整理';
+  }
+});
+
+function clearProductRiskResult() {
+  const result = $('product-risk-result');
+  result.hidden = true;
+  result.replaceChildren();
+}
+
+function renderProductRiskResult(risk) {
+  const result = $('product-risk-result');
+  const names = { low: '低风险提示', medium: '需要进一步核实', high: '建议谨慎核实' };
+  result.dataset.level = risk.riskLevel;
+  result.replaceChildren(el('h3', names[risk.riskLevel] || '交易风险提示'));
+  const reasons = el('ul', '');
+  for (const reason of risk.reasons || []) reasons.append(el('li', reason));
+  result.append(reasons);
+  if (risk.suggestions?.length) {
+    result.append(el('strong', '建议核实'));
+    const suggestions = el('ul', '');
+    for (const suggestion of risk.suggestions) suggestions.append(el('li', suggestion));
+    result.append(suggestions);
+  }
+  if (risk.needsManualReview) result.append(el('p', '建议人工复核；平台不会根据本次检查自动下架商品。'));
+  result.append(el('p', risk.notice || (risk.analysisMode === 'RULES_ONLY' ? '仅完成规则检查。' : '结果仅供参考。')));
+  result.hidden = false;
+}
+
+$('publish-form').addEventListener('input', clearProductRiskResult);
+$('publish-form').addEventListener('change', clearProductRiskResult);
+$('product-risk-button').addEventListener('click', async () => {
+  const form = $('publish-form');
+  const title = form.elements.title.value.trim();
+  const description = form.elements.description.value.trim();
+  const priceText = form.elements.price.value.trim();
+  const categoryId = Number(form.elements.categoryId.value);
+  if (!title || !description || !/^(?:0|[1-9]\d{0,7})(?:\.\d{1,2})?$/.test(priceText)
+      || Number(priceText) <= 0 || !categoryId) {
+    toast('请先填写标题、描述、分类及有效价格，再检查交易风险', true);
+    return;
+  }
+  const button = $('product-risk-button');
+  button.disabled = true;
+  button.textContent = '检查中…';
+  clearProductRiskResult();
+  try {
+    const risk = await api('/api/ai/product-risk', {
+      method: 'POST', body: JSON.stringify({ title, description, price: Number(priceText), categoryId })
+    });
+    renderProductRiskResult(risk);
+  } catch (error) {
+    toast(`风险检查未完成：${error.message}。可继续手动发布。`, true);
+  } finally {
+    button.disabled = false;
+    button.textContent = '检查当前商品';
   }
 });
 
@@ -581,6 +639,7 @@ $('publish-form').addEventListener('submit', async event => {
     description: String(form.get('description')), price: Number(priceText),
     conditionLevel: String(form.get('conditionLevel'))
   };
+  if (editing) payload.version = editing.version;
   button.disabled = true;
   try {
     const saved = await api(editing ? `/api/products/${editing.id}` : '/api/products', {
@@ -643,6 +702,18 @@ configureMessaging({
 });
 configureFavorites({ openDetail, refreshProducts: loadProducts });
 configureNotifications({ openOrder: openOrderDetail });
+bindAgent({
+  openProduct: openDetail,
+  useDraft: draft => {
+    setPublishMode();
+    navigate('publish');
+    const form = $('publish-form');
+    form.elements.title.value = draft.title;
+    form.elements.description.value = draft.description;
+    form.elements.categoryId.value = String(draft.categoryId);
+    toast('草稿已回填，请核对价格、成色和实物信息后再发布。');
+  }
+});
 bindAuthEvents();
 bindProfileEvents();
 bindOrderEvents();

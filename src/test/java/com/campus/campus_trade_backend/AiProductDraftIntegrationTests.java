@@ -62,6 +62,16 @@ class AiProductDraftIntegrationTests {
                 .andExpect(jsonPath("$.id").isNumber());
     }
 
+    @Test
+    void disabledAgentReturnsClearErrorWithoutBlockingMarketplace() throws Exception {
+        mvc.perform(post("/api/ai/agent/chat")
+                        .header("Authorization", "Bearer " + registerAndLogin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"找一本旧教材\"}"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.detail").value("AI 助手尚未启用；商品搜索和手动发布仍可正常使用"));
+    }
+
     private String registerAndLogin() {
         String email = UUID.randomUUID() + "@example.invalid";
         verificationService.send(email);

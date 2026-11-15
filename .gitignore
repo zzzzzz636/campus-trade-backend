@@ -37,3 +37,28 @@ build/
 .env
 .env.*
 !.env.example
+
+# Local credentials and generated data (keep files on disk; never publish them)
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+**/application-*.private.properties
+**/application-secrets.*
+*.log
+/logs/
+/backups/
+*.sql.gz
+*.sqlite
+*.sqlite3
+*.db
+/uploads/
+/coverage/
+/playwright-report/
+/test-results/
+
+# Installed local UI skills are tooling, not application source
+/.agents/
+/skills-lock.json

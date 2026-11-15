@@ -120,6 +120,8 @@ class OrderV2IntegrationTests {
         for (long productId : productIds) jdbc.update("DELETE FROM order_event WHERE order_id IN (SELECT id FROM trade_order WHERE product_id = ?)", productId);
         for (long productId : productIds) jdbc.update("DELETE FROM order_cancel_request WHERE order_id IN (SELECT id FROM trade_order WHERE product_id = ?)", productId);
         for (long productId : productIds) jdbc.update("DELETE FROM trade_order WHERE product_id = ?", productId);
+        for (long productId : productIds) jdbc.update("DELETE FROM product_search_consumed WHERE event_id IN (SELECT id FROM product_search_outbox WHERE product_id = ?)", productId);
+        for (long productId : productIds) jdbc.update("DELETE FROM product_search_outbox WHERE product_id = ?", productId);
         for (long productId : productIds) jdbc.update("DELETE FROM product WHERE id = ?", productId);
         for (long userId : userIds) jdbc.update("DELETE FROM app_user WHERE id = ?", userId);
     }

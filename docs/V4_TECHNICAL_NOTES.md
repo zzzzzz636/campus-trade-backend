@@ -108,7 +108,7 @@ V4 不改变模块化单体架构，不迁移微服务，也不重写现有后�
 运行命令：
 
 ```powershell
-$env:JAVA_HOME='C:\Users\zw\.jdks\ms-17.0.19'
+$env:JAVA_HOME='C:\path\to\jdk-17'
 .\mvnw.cmd '-Dtest=V4BrowserFlowTests' test
 ```
 

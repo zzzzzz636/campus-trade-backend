@@ -1,0 +1,7 @@
+campus_kafka_consumer_end_to_end_seconds_count{application="campus-trade",group="heat"} 1500
+campus_kafka_consumer_end_to_end_seconds_sum{application="campus-trade",group="heat"} 23.8256549
+campus_kafka_consumer_end_to_end_seconds_count{application="campus-trade",group="stats"} 1500
+campus_kafka_consumer_end_to_end_seconds_sum{application="campus-trade",group="stats"} 23.8275067
+campus_kafka_consumer_processed_total{application="campus-trade",group="heat"} 1500.0
+campus_kafka_consumer_processed_total{application="campus-trade",group="stats"} 1500.0
+campus_kafka_producer_sent_total{application="campus-trade",type="PRODUCT_VIEW"} 1500.0

@@ -16,6 +16,7 @@ import com.campus.campus_trade_backend.product.mapper.ProductMapper;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -41,7 +42,8 @@ public class MessagingService {
         this.rateLimiter = rateLimiter;
     }
 
-    @Transactional
+    // 重复键插入会等待赢家提交；READ_COMMITTED 让随后普通查询看到赢家刚提交的会话。
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public ConversationResponse start(StartConversationRequest request, long userId) {
         long otherId = resolveOtherParticipant(request.contextType(), request.contextId(), userId);
         long low = Math.min(userId, otherId);
@@ -58,6 +60,9 @@ public class MessagingService {
                 conversationMapper.insert(conversation);
             } catch (DuplicateKeyException race) {
                 conversation = conversationMapper.findUnique(request.contextType().name(), request.contextId(), low, high);
+                if (conversation == null) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "会话创建冲突，请重试", race);
+                }
             }
         }
         return toResponse(requireParticipant(conversation.getId(), userId));

@@ -10,6 +10,7 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 
 public record UpdateProductRequest(
+        @NotNull @Min(0) Integer version,
         @NotNull @Min(1) Long categoryId,
         @NotBlank @Size(max = 120) String title,
         @NotBlank @Size(max = 5000) String description,

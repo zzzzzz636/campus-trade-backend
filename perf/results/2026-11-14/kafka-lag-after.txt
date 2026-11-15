@@ -1,0 +1,8 @@
+
+GROUP           TOPIC              PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                                    HOST            CLIENT-ID
+campus-heat-v1  campus.behavior.v1 1          -               0               -               consumer-campus-heat-v1-1-2556a8fc-e3c2-431c-9d5e-24e0ae003c72 /<docker-internal-ip>     consumer-campus-heat-v1-1
+campus-heat-v1  campus.behavior.v1 0          -               0               -               consumer-campus-heat-v1-1-2556a8fc-e3c2-431c-9d5e-24e0ae003c72 /<docker-internal-ip>     consumer-campus-heat-v1-1
+campus-heat-v1  campus.behavior.v1 5          -               0               -               consumer-campus-heat-v1-1-2556a8fc-e3c2-431c-9d5e-24e0ae003c72 /<docker-internal-ip>     consumer-campus-heat-v1-1
+campus-heat-v1  campus.behavior.v1 4          -               0               -               consumer-campus-heat-v1-1-2556a8fc-e3c2-431c-9d5e-24e0ae003c72 /<docker-internal-ip>     consumer-campus-heat-v1-1
+campus-heat-v1  campus.behavior.v1 3          1502            1502            0               consumer-campus-heat-v1-1-2556a8fc-e3c2-431c-9d5e-24e0ae003c72 /<docker-internal-ip>     consumer-campus-heat-v1-1
+campus-heat-v1  campus.behavior.v1 2          2               2               0               consumer-campus-heat-v1-1-2556a8fc-e3c2-431c-9d5e-24e0ae003c72 /<docker-internal-ip>     consumer-campus-heat-v1-1

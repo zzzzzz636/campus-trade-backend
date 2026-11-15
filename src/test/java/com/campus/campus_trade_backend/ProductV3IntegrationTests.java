@@ -72,9 +72,19 @@ class ProductV3IntegrationTests {
         Session seller = register("V3 卖家");
         Session buyer = register("V3 买家");
         long productId = productService.create(product(1L, "待编辑商品", "26.00"), seller.id());
+        mvc.perform(get("/api/products/{id}", productId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(0));
         String body = """
-                {"categoryId":2,"title":"更新后的台灯","description":"描述已经更新", "price":19.90,"conditionLevel":"LIKE_NEW"}
+                {"version":0,"categoryId":2,"title":"更新后的台灯","description":"描述已经更新", "price":19.90,"conditionLevel":"LIKE_NEW"}
                 """;
+
+        mvc.perform(put("/api/products/{id}", productId)
+                        .header("Authorization", "Bearer " + seller.token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body.replace("\"version\":0,", "")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("VALIDATION_FAILED"));
 
         mvc.perform(put("/api/products/{id}", productId)
                         .contentType(MediaType.APPLICATION_JSON).content(body))
@@ -89,9 +99,16 @@ class ProductV3IntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("更新后的台灯"))
+                .andExpect(jsonPath("$.version").value(1))
                 .andExpect(jsonPath("$.categoryName").value("数码与电器"))
                 .andExpect(jsonPath("$.price").value(19.90))
                 .andExpect(jsonPath("$.updatedAt").isNotEmpty());
+
+        mvc.perform(put("/api/products/{id}", productId)
+                        .header("Authorization", "Bearer " + seller.token())
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value("商品信息或状态已变化，请刷新后重试"));
 
         orderService.create(productId, buyer.id(), UUID.randomUUID().toString());
         mvc.perform(put("/api/products/{id}", productId)

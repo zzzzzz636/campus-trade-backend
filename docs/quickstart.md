@@ -2,10 +2,10 @@
 
 项目使用 Java 17 和 Maven Wrapper。默认 `local` 配置使用 H2 内存数据库，启动时自动建立业务表并插入演示商品；重启后数据恢复为种子状态。演示用户没有可登录密码，请自行注册。`local` 验证码只打印在后端控制台，MySQL 配置使用 Redis 与 SMTP。V6 新增通知中心、协商取消、个人资料/密码操作和订单分页。
 
-在 `E:\campus-trade-backend` 的 PowerShell 终端中运行：
+在项目根目录的 PowerShell 终端中运行：
 
 ```powershell
-$env:JAVA_HOME='C:\Users\zw\.jdks\ms-17.0.19'
+$env:JAVA_HOME='C:\path\to\jdk-17'
 $env:Path="$env:JAVA_HOME\bin;$env:Path"
 .\mvnw.cmd test
 .\mvnw.cmd spring-boot:run
@@ -44,7 +44,7 @@ V3 使用 Flyway 管理 MySQL 表结构：
 从新的 PowerShell 启动 Docker MySQL 配置时，先读取 `.env` 中你设置的值并在同一终端运行。以下密码和 JWT 示例必须替换为 `.env` 中的实际本机值：
 
 ```powershell
-$env:JAVA_HOME='C:\Users\zw\.jdks\ms-17.0.19'
+$env:JAVA_HOME='C:\path\to\jdk-17'
 $env:Path="$env:JAVA_HOME\bin;$env:Path"
 $env:CAMPUS_DB_URL='jdbc:mysql://127.0.0.1:3307/campus_trade?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai'
 $env:CAMPUS_DB_USER='campus_trade'
@@ -81,7 +81,7 @@ $env:CAMPUS_AI_MODEL='gpt-4o-mini'
 Docker Desktop 运行时可执行：
 
 ```powershell
-$env:JAVA_HOME='C:\Users\zw\.jdks\ms-17.0.19'
+$env:JAVA_HOME='C:\path\to\jdk-17'
 .\mvnw.cmd '-Dcampus.mysql.tests=true' '-Dtest=MySqlOrderConcurrencyIntegrationTests' test
 ```
 
@@ -92,7 +92,7 @@ $env:JAVA_HOME='C:\Users\zw\.jdks\ms-17.0.19'
 Windows 已安装 Microsoft Edge 时可执行：
 
 ```powershell
-$env:JAVA_HOME='C:\Users\zw\.jdks\ms-17.0.19'
+$env:JAVA_HOME='C:\path\to\jdk-17'
 .\mvnw.cmd '-Dtest=V4BrowserFlowTests' test
 ```
 

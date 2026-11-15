@@ -1,0 +1,11 @@
+Date: 2026-11-14 Asia/Shanghai
+Environment: isolated campus-accept Compose project, six middleware containers plus app and Prometheus.
+App runtime: latest local JAR mounted into already-cached apache/kafka:3.9.1 image (Java 21); temporary target/ override, not the production Java 17 Dockerfile.
+App container: campus-accept-app-1 healthy, 127.0.0.1:8080.
+Two-account E2E via container port: registeredUsers=2, productId=3, indexed=true, hotScoreBeforeSale=2, sellerNotified=true, orderId=2, acceptedStatus=WAITING_HANDOFF, completedStatus=COMPLETED, productStatus=SOLD.
+Prometheus target: http://app:8080/actuator/prometheus, health=up.
+Prometheus query: campus_redis_up=1; sum(campus_kafka_consumer_processed_total)=4; sum(campus_outbox_events{state="pending"})=0.
+Fault injection: stopped only campus-accept Redis; after scrape campus_redis_up=0. Restarted Redis, health=healthy; after scrape campus_redis_up=1.
+Fault injection: stopped only campus-accept Kafka; product detail HTTP 200 in 302 ms; Prometheus sum(campus_kafka_producer_failed_total)=1. Restarted Broker, health=healthy; next product detail increased Redis hot score from 1503 to 1504.
+Grafana dashboard: all 14 PromQL expressions parsed by live Prometheus API; 12 had current series, 2 failure-rate panels were empty because no corresponding failure counter had been created.
+Standard application Dockerfile build: not validated; Docker Hub JRE/build image auth timeout.

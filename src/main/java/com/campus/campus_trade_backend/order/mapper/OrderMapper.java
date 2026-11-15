@@ -140,6 +140,16 @@ public interface OrderMapper {
     OrderEntity findByBuyerAndRequestKey(@Param("buyerId") long buyerId,
                                          @Param("requestKey") String requestKey);
 
+    @Select("""
+            SELECT id, product_id, buyer_id, seller_id,
+                   product_title_snapshot AS product_title, product_description_snapshot AS product_description,
+                   price, status, fulfillment_type, request_key, created_at, updated_at
+            FROM trade_order WHERE buyer_id = #{buyerId} AND request_key = #{requestKey}
+            FOR UPDATE
+            """)
+    OrderEntity findByBuyerAndRequestKeyForUpdate(@Param("buyerId") long buyerId,
+                                                  @Param("requestKey") String requestKey);
+
     @Update("""
             UPDATE trade_order
             SET status = #{targetStatus}, seller_decision_note = #{note},

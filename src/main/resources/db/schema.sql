@@ -156,6 +156,28 @@ CREATE TABLE app_notification (
 
 CREATE INDEX idx_notification_user_read ON app_notification (user_id, read_at, created_at, id);
 
+CREATE TABLE order_notification_outbox (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    event_key VARCHAR(120) NOT NULL UNIQUE,
+    order_id BIGINT NOT NULL,
+    recipient_id BIGINT NOT NULL,
+    event_type VARCHAR(40) NOT NULL,
+    title VARCHAR(160) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    attempts INT NOT NULL DEFAULT 0,
+    next_attempt_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    published_at TIMESTAMP,
+    CONSTRAINT fk_outbox_order FOREIGN KEY (order_id) REFERENCES trade_order(id),
+    CONSTRAINT fk_outbox_recipient FOREIGN KEY (recipient_id) REFERENCES app_user(id)
+);
+CREATE INDEX idx_outbox_due ON order_notification_outbox (status, next_attempt_at, id);
+CREATE TABLE order_notification_consumed (
+    event_id BIGINT PRIMARY KEY,
+    consumed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_consumed_event FOREIGN KEY (event_id) REFERENCES order_notification_outbox(id)
+);
+
 CREATE TABLE order_cancel_request (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     order_id BIGINT NOT NULL,
@@ -168,3 +190,23 @@ CREATE TABLE order_cancel_request (
     CONSTRAINT fk_cancel_request_user FOREIGN KEY (requester_id) REFERENCES app_user(id)
 );
 CREATE INDEX idx_cancel_request_order_status ON order_cancel_request (order_id, status, id);
+
+CREATE TABLE product_search_outbox (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    product_id BIGINT NOT NULL,
+    product_version INT NOT NULL,
+    event_type VARCHAR(32) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    attempts INT NOT NULL DEFAULT 0,
+    next_attempt_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    published_at TIMESTAMP,
+    CONSTRAINT fk_product_search_event_product FOREIGN KEY (product_id) REFERENCES product(id),
+    CONSTRAINT uq_product_search_version UNIQUE (product_id, product_version)
+);
+CREATE INDEX idx_product_search_due ON product_search_outbox (status, next_attempt_at, id);
+CREATE TABLE product_search_consumed (
+    event_id BIGINT PRIMARY KEY,
+    consumed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_product_search_consumed_event FOREIGN KEY (event_id) REFERENCES product_search_outbox(id)
+);

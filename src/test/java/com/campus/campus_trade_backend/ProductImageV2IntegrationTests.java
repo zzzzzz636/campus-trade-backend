@@ -8,6 +8,7 @@ import com.campus.campus_trade_backend.auth.verification.LocalConsoleMailSender;
 import com.campus.campus_trade_backend.auth.verification.VerificationService;
 import com.campus.campus_trade_backend.product.dto.ConditionLevel;
 import com.campus.campus_trade_backend.product.dto.CreateProductRequest;
+import com.campus.campus_trade_backend.product.dto.ProductImageResponse;
 import com.campus.campus_trade_backend.product.service.ProductImageService;
 import com.campus.campus_trade_backend.product.service.ProductService;
 import org.junit.jupiter.api.AfterEach;
@@ -61,6 +62,8 @@ class ProductImageV2IntegrationTests {
     @AfterEach
     void removeRows() {
         for (long productId : productIds) jdbc.update("DELETE FROM product_image WHERE product_id = ?", productId);
+        for (long productId : productIds) jdbc.update("DELETE FROM product_search_consumed WHERE event_id IN (SELECT id FROM product_search_outbox WHERE product_id = ?)", productId);
+        for (long productId : productIds) jdbc.update("DELETE FROM product_search_outbox WHERE product_id = ?", productId);
         for (long productId : productIds) jdbc.update("DELETE FROM product WHERE id = ?", productId);
         for (long userId : userIds) jdbc.update("DELETE FROM app_user WHERE id = ?", userId);
     }
@@ -81,6 +84,34 @@ class ProductImageV2IntegrationTests {
         imageService.delete(productId, uploaded.get(0).id(), seller.id());
         assertFalse(Files.exists(stored));
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM product_image WHERE product_id = ?", Integer.class, productId));
+    }
+
+    @Test
+    void uploadingThreeImagesAssignsUniqueOrders() {
+        UserResponse seller = user("多图卖家");
+        long productId = product(seller.id());
+
+        assertOrders(productId, upload(productId, seller.id(), 3), List.of(0, 1, 2));
+    }
+
+    @Test
+    void deletingMiddleImageDoesNotReuseAnOccupiedOrder() {
+        UserResponse seller = user("中间删除卖家");
+        long productId = product(seller.id());
+        List<ProductImageResponse> original = upload(productId, seller.id(), 3);
+
+        imageService.delete(productId, original.get(1).id(), seller.id());
+        assertOrders(productId, upload(productId, seller.id(), 1), List.of(0, 2, 3));
+    }
+
+    @Test
+    void deletingLastImageAllowsAnotherUpload() {
+        UserResponse seller = user("末尾删除卖家");
+        long productId = product(seller.id());
+        List<ProductImageResponse> original = upload(productId, seller.id(), 3);
+
+        imageService.delete(productId, original.get(2).id(), seller.id());
+        assertOrders(productId, upload(productId, seller.id(), 1), List.of(0, 1, 2));
     }
 
     @Test
@@ -123,6 +154,21 @@ class ProductImageV2IntegrationTests {
                 localMail.latestCodeForTest(email)));
         userIds.add(user.id());
         return user;
+    }
+
+    private List<ProductImageResponse> upload(long productId, long sellerId, int count) {
+        List<MockMultipartFile> files = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            files.add(new MockMultipartFile("files", "image-" + i + ".png", "image/png", PNG));
+        }
+        return imageService.upload(productId, sellerId, new ArrayList<>(files));
+    }
+
+    private void assertOrders(long productId, List<ProductImageResponse> images, List<Integer> expected) {
+        assertEquals(expected, images.stream().map(ProductImageResponse::sortOrder).toList());
+        assertEquals(images.size(), jdbc.queryForObject(
+                "SELECT COUNT(DISTINCT sort_order) FROM product_image WHERE product_id = ?",
+                Integer.class, productId));
     }
 
     private long product(long sellerId) {
